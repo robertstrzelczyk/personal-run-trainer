@@ -1,7 +1,6 @@
 import type { RunSummary } from "../types";
-import { isNativeApp } from "../platform";
-import { activitiesForDays, metricsForDays, runForActivity } from "./service";
 import { GarminHttpError, obtainToken } from "./personal-api";
+import { activitiesForDays, metricsForDays, runForActivity } from "./service";
 
 export interface SyncProgress {
   phase: "token" | "list" | "download" | "metrics";
@@ -28,40 +27,6 @@ class ApiError extends Error {
   }
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new ApiError(data.error ?? `Błąd ${res.status}`, res.status);
-  return data;
-}
-
-interface MetricsResult {
-  vo2: SyncResult["vo2"];
-  maxHr?: number;
-  restHr?: number;
-  warnings?: string[];
-}
-
-interface GarminOps {
-  token(apiKey: string): Promise<string>;
-  activities(token: string, days: number): Promise<Array<{ id: string; startTime: string }>>;
-  run(token: string, id: string): Promise<{ run?: RunSummary; skipped?: boolean }>;
-  metrics(token: string, days: number): Promise<MetricsResult>;
-}
-
-const serverOps: GarminOps = {
-  token: async (apiKey) => (await post<{ token: string }>("/api/garmin/token", { apiKey })).token,
-  activities: async (token, days) =>
-    (await post<{ activities: Array<{ id: string; startTime: string }> }>("/api/garmin/activities", { token, days }))
-      .activities,
-  run: (token, id) => post("/api/garmin/run", { token, id }),
-  metrics: (token, days) => post("/api/garmin/metrics", { token, days }),
-};
-
 async function direct<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
@@ -70,14 +35,6 @@ async function direct<T>(work: () => Promise<T>): Promise<T> {
     throw error;
   }
 }
-
-/** W aplikacji mobilnej telefon sam rozmawia z Garmin Connect, bez pośredniczącego serwera. */
-const deviceOps: GarminOps = {
-  token: (apiKey) => direct(() => obtainToken(apiKey.trim())),
-  activities: (token, days) => direct(() => activitiesForDays(token, days)),
-  run: (token, id) => direct(() => runForActivity(token, id)),
-  metrics: (token, days) => direct(() => metricsForDays(token, days)),
-};
 
 interface KnownRun {
   id: string;
@@ -91,13 +48,12 @@ export async function syncGarmin(options: {
   onProgress: (p: SyncProgress) => void;
 }): Promise<SyncResult> {
   const { apiKey, days, known, onProgress } = options;
-  const ops = isNativeApp() ? deviceOps : serverOps;
 
   onProgress({ phase: "token" });
-  const token = await ops.token(apiKey);
+  const token = await direct(() => obtainToken(apiKey.trim()));
 
   onProgress({ phase: "list" });
-  const activities = await ops.activities(token, days);
+  const activities = await direct(() => activitiesForDays(token, days));
 
   const knownTimes = known.map((k) => new Date(k.startTime).getTime());
   const knownIds = new Set(known.map((k) => k.id));
@@ -119,35 +75,36 @@ export async function syncGarmin(options: {
     while (cursor < pending.length && !fatal) {
       const activity = pending[cursor++];
       try {
-        const result = await ops.run(token, activity.id);
+        const result = await direct(() => runForActivity(token, activity.id));
         if (result.run) runs.push(result.run);
       } catch (error) {
-        if (error instanceof ApiError && (error.status === 401 || error.status === 429)) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
           fatal = error;
-        } else {
-          failed++;
+          return;
         }
+        failed++;
+      } finally {
+        done++;
+        onProgress({ phase: "download", done, total: pending.length });
       }
-      onProgress({ phase: "download", done: ++done, total: pending.length });
     }
   };
-  await Promise.all([worker(), worker()]);
-  if (fatal) warnings.push(fatal.message);
+
+  await Promise.all(Array.from({ length: Math.min(3, Math.max(1, pending.length)) }, () => worker()));
+  if (fatal) throw fatal;
 
   onProgress({ phase: "metrics" });
   let vo2: SyncResult["vo2"] = [];
   let maxHr: number | undefined;
   let restHr: number | undefined;
-  if (!fatal) {
-    try {
-      const metrics = await ops.metrics(token, Math.max(days, 60));
-      vo2 = metrics.vo2;
-      maxHr = metrics.maxHr;
-      restHr = metrics.restHr;
-      warnings.push(...(metrics.warnings ?? []));
-    } catch (error) {
-      warnings.push(error instanceof Error ? error.message : "Nie udało się pobrać metryk Garmin");
-    }
+  try {
+    const metrics = await direct(() => metricsForDays(token, days));
+    vo2 = metrics.vo2;
+    maxHr = metrics.maxHr;
+    restHr = metrics.restHr;
+    warnings.push(...(metrics.warnings ?? []));
+  } catch {
+    warnings.push("Nie udało się pobrać metryk VO2/stref tętna.");
   }
 
   return {
@@ -160,3 +117,5 @@ export async function syncGarmin(options: {
     warnings,
   };
 }
+
+export { ApiError as GarminSyncError };

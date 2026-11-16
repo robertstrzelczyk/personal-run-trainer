@@ -14,7 +14,11 @@ export class GarminHttpError extends Error {
 }
 
 function baseUrl() {
-  return (process.env.GARMIN_PERSONAL_API_BASE_URL ?? DEFAULT_BASE).replace(/\/$/, "");
+  return (
+    process.env.EXPO_PUBLIC_GARMIN_PERSONAL_API_BASE_URL ??
+    process.env.GARMIN_PERSONAL_API_BASE_URL ??
+    DEFAULT_BASE
+  ).replace(/\/$/, "");
 }
 
 const TOKEN_PATTERN = /^[A-Za-z0-9._~+/=-]{10,8192}$/;
