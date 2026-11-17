@@ -13,6 +13,8 @@ export interface Profile {
 
 export type RunSource = "fit" | "garmin" | "demo";
 
+export type ActivitySport = "running" | "walking" | "cycling";
+
 export interface BestEfforts {
   /** najlepszy czas (s) na dystansie, klucz = dystans w metrach */
   [distanceM: string]: number;
@@ -21,6 +23,8 @@ export interface BestEfforts {
 export interface RunSummary {
   id: string;
   source: RunSource;
+  /** Domyślnie running dla starszych zapisów bez pola. */
+  sport?: ActivitySport;
   name?: string;
   startTime: string;
   distanceM: number;

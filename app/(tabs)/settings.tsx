@@ -1,11 +1,23 @@
 import { useEffect, useState } from "react";
 import { Alert, ScrollView, Text } from "react-native";
-import { Button, Card, Field, Muted, Screen, Subtitle, Title } from "@/src/components/ui";
+import {
+  Button,
+  Card,
+  ChipSelect,
+  Field,
+  Muted,
+  Screen,
+  Subtitle,
+  Title,
+  ToggleRow,
+} from "@/src/components/ui";
 import { clearGarminApiKey, getGarminApiKey, setGarminApiKey } from "@/src/lib/garmin-key";
-import { syncGarmin, type SyncProgress } from "@/src/lib/garmin/client";
+import { AUTO_SYNC_HOURS } from "@/src/lib/garmin/apply-sync";
+import type { SyncProgress } from "@/src/lib/garmin/client";
 import { useAuth } from "@/src/lib/auth-context";
+import { GOAL_OPTIONS, SEX_OPTIONS } from "@/src/lib/labels";
 import type { Goal, Profile, Sex } from "@/src/lib/types";
-import { colors } from "@/src/theme";
+import { colors, fonts } from "@/src/theme";
 
 const PHASE: Record<SyncProgress["phase"], string> = {
   token: "Logowanie kluczem API…",
@@ -19,9 +31,9 @@ export default function SettingsScreen() {
   const [apiKey, setApiKey] = useState("");
   const [hasKey, setHasKey] = useState(false);
   const [days, setDays] = useState("90");
-  const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [profile, setProfile] = useState<Profile>(auth.profile);
-  const busy = progress !== null;
+  const busy = auth.syncing;
+  const progress = auth.syncProgress;
 
   useEffect(() => {
     setProfile(auth.profile);
@@ -42,7 +54,7 @@ export default function SettingsScreen() {
     await setGarminApiKey(apiKey);
     setApiKey("");
     setHasKey(true);
-    Alert.alert("Zapisano", "Klucz jest w bezpiecznym magazynie telefonu (SecureStore).");
+    Alert.alert("Zapisano", "Klucz jest w bezpiecznym magazynie telefonu.");
   }
 
   async function onSync() {
@@ -51,42 +63,16 @@ export default function SettingsScreen() {
       Alert.alert("Brak klucza", "Najpierw zapisz Personal API Key.");
       return;
     }
-    setProgress({ phase: "token" });
     try {
       if (apiKey.trim()) await setGarminApiKey(apiKey);
-      const result = await syncGarmin({
+      const result = await auth.runSync({
         apiKey: key,
         days: Number(days) || 90,
-        known: auth.runs.map((r) => ({ id: r.id, startTime: r.startTime })),
-        onProgress: setProgress,
       });
-
-      let nextProfile = { ...auth.profile };
-      if (result.maxHr || result.restHr) {
-        nextProfile = {
-          ...nextProfile,
-          maxHr: result.maxHr ?? nextProfile.maxHr,
-          restHr: result.restHr ?? nextProfile.restHr,
-        };
-        await auth.saveProfile(nextProfile);
-        setProfile(nextProfile);
-      }
-
-      const merged = [
-        ...result.runs,
-        ...auth.runs.filter((r) => !result.runs.some((n) => n.id === r.id)),
-      ].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
-      auth.setRunsLocal(merged);
-
-      if (result.vo2.length) {
-        const map = new Map(auth.vo2.map((v) => [v.date, v.value]));
-        for (const v of result.vo2) map.set(v.date, v.value);
-        auth.setVo2Local([...map.entries()].map(([date, value]) => ({ date, value })));
-      }
-      auth.setLastSyncLocal(new Date().toISOString());
+      if (!result) return;
       setHasKey(true);
       setApiKey("");
-
+      setProfile(auth.profile);
       Alert.alert(
         "Synchronizacja zakończona",
         `Nowe biegi: ${result.runs.length}. Już znane: ${result.alreadyKnown}. Błędy: ${result.failed}. Dane zapisane lokalnie na telefonie.`,
@@ -94,8 +80,6 @@ export default function SettingsScreen() {
       result.warnings.forEach((w) => Alert.alert("Uwaga", w));
     } catch (e) {
       Alert.alert("Synchronizacja nieudana", e instanceof Error ? e.message : "Błąd");
-    } finally {
-      setProgress(null);
     }
   }
 
@@ -110,28 +94,34 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 48 }}>
+      <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
         <Card>
           <Title>Dane lokalne</Title>
           <Muted>
-            Logowanie jest na razie wyłączone. Profil i biegi zapisują się na tym telefonie
-            (AsyncStorage).
+            Logowanie jest na razie wyłączone. Profil i biegi zapisują się tylko na tym telefonie.
           </Muted>
           {auth.lastSync && (
             <Muted>{`Ostatnia sync: ${new Date(auth.lastSync).toLocaleString("pl-PL")}`}</Muted>
           )}
-          <Muted>{`Biegów w pamięci: ${auth.runs.length}`}</Muted>
+          <Muted>{`Biegów zapisanych: ${auth.runs.length}`}</Muted>
+          {auth.syncError ? <Muted>{`Ostatni błąd sync: ${auth.syncError}`}</Muted> : null}
+          <ToggleRow
+            label="Auto-sync przy otwarciu"
+            detail={`Gdy minie ${AUTO_SYNC_HOURS} h od ostatniej synchronizacji.`}
+            value={auth.autoSync}
+            onValueChange={(v) => void auth.setAutoSync(v)}
+          />
         </Card>
 
-        <Card>
-          <Subtitle>Garmin Connect (Personal API Key)</Subtitle>
+        <Card delay={60}>
+          <Subtitle>Garmin Connect</Subtitle>
           <Muted>
             W Garmin Connect (wersja na komputer): Ustawienia → Personal API Key → Utwórz klucz. Klucz
             zostaje na telefonie; nie logujemy hasłem do Connect.
           </Muted>
           <Muted>{hasKey ? "Klucz jest zapisany na urządzeniu." : "Brak zapisanego klucza."}</Muted>
           <Field
-            label="Personal API Key"
+            label="Klucz Personal API"
             value={apiKey}
             onChangeText={setApiKey}
             autoCapitalize="none"
@@ -146,7 +136,7 @@ export default function SettingsScreen() {
           />
           <Button title="Zapisz klucz" variant="ghost" onPress={saveKey} disabled={busy} />
           <Button
-            title={busy ? PHASE[progress!.phase] : "Synchronizuj z Garmin"}
+            title={busy && progress ? PHASE[progress.phase] : "Synchronizuj z Garmin"}
             onPress={onSync}
             disabled={busy}
           />
@@ -165,7 +155,7 @@ export default function SettingsScreen() {
           )}
         </Card>
 
-        <Card>
+        <Card delay={120}>
           <Subtitle>Profil treningowy</Subtitle>
           <Field
             label="Wiek"
@@ -173,13 +163,11 @@ export default function SettingsScreen() {
             value={String(profile.age)}
             onChangeText={(t) => setProfile({ ...profile, age: Number(t) || profile.age })}
           />
-          <Field
-            label="Płeć (male/female)"
-            autoCapitalize="none"
+          <ChipSelect
+            label="Płeć"
             value={profile.sex}
-            onChangeText={(t) =>
-              setProfile({ ...profile, sex: (t === "female" ? "female" : "male") as Sex })
-            }
+            options={SEX_OPTIONS}
+            onChange={(sex: Sex) => setProfile({ ...profile, sex })}
           />
           <Field
             label="Tętno maksymalne"
@@ -193,11 +181,11 @@ export default function SettingsScreen() {
             value={String(profile.restHr)}
             onChangeText={(t) => setProfile({ ...profile, restHr: Number(t) || profile.restHr })}
           />
-          <Field
-            label="Cel (fitness/5k/10k/half/marathon)"
-            autoCapitalize="none"
+          <ChipSelect
+            label="Cel"
             value={profile.goal}
-            onChangeText={(t) => setProfile({ ...profile, goal: t as Goal })}
+            options={GOAL_OPTIONS}
+            onChange={(goal: Goal) => setProfile({ ...profile, goal })}
           />
           <Field
             label="Dni biegowe / tydzień"
@@ -210,11 +198,11 @@ export default function SettingsScreen() {
           <Button title="Zapisz profil" onPress={onSaveProfile} />
         </Card>
 
-        <Card>
+        <Card delay={180}>
           <Subtitle>O aplikacji</Subtitle>
-          <Text style={{ color: colors.muted, lineHeight: 20 }}>
-            Osobisty trener dla Garmin Venu 2 Plus: forma, obciążenie, VO2/VDOT i trening na dziś.
-            Dane lokalne na telefonie; klucz Garmin w SecureStore.
+          <Text style={{ color: colors.muted, lineHeight: 20, fontFamily: fonts.body }}>
+            Osobisty trener dla Garmin Venu 2 Plus: forma, obciążenie, VO2/VDOT oraz trening na dziś i
+            jutro. Dane lokalne na telefonie; klucz Garmin w bezpiecznym magazynie.
           </Text>
         </Card>
       </ScrollView>

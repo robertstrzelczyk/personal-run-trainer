@@ -1,9 +1,10 @@
 import { Decoder, Stream } from "@garmin/fitsdk";
-import type { RunSource, RunSummary } from "../types";
+import { normalizeSport } from "../sport";
+import type { ActivitySport, RunSource, RunSummary } from "../types";
 
 export class NotARunError extends Error {
   constructor(sport: string) {
-    super(`To nie jest bieg (sport: ${sport})`);
+    super(`Nieobsługiwany sport: ${sport}`);
     this.name = "NotARunError";
   }
 }
@@ -17,6 +18,12 @@ interface Rec {
 
 const BEST_DISTANCES = [1000, 3000, 5000, 10000];
 const MOVING_SPEED = 0.8;
+
+const MIN_BY_SPORT: Record<ActivitySport, { distanceM: number; durationS: number }> = {
+  running: { distanceM: 300, durationS: 120 },
+  walking: { distanceM: 200, durationS: 120 },
+  cycling: { distanceM: 500, durationS: 120 },
+};
 
 function bestEffort(recs: Rec[], target: number): number | undefined {
   const pts = recs.filter((r) => r.dist !== undefined);
@@ -48,8 +55,7 @@ function decoupling(recs: Rec[]): number | undefined {
   const half = Math.floor(body.length / 2);
   const a = body.slice(0, half);
   const b = body.slice(half);
-  const ef = (part: Rec[]) =>
-    mean(part.map((r) => r.speed!)) / mean(part.map((r) => r.hr!));
+  const ef = (part: Rec[]) => mean(part.map((r) => r.speed!)) / mean(part.map((r) => r.hr!));
   const efA = ef(a);
   const efB = ef(b);
   if (!isFinite(efA) || !isFinite(efB) || efA <= 0) return undefined;
@@ -76,6 +82,7 @@ export function parseRunFit(
   bytes: Uint8Array,
   source: RunSource,
   idOverride?: string,
+  sportHint?: ActivitySport,
 ): RunSummary {
   const stream = Stream.fromByteArray(Array.from(bytes));
   const decoder = new Decoder(stream);
@@ -84,8 +91,9 @@ export function parseRunFit(
 
   const session = messages.sessionMesgs?.[0];
   if (!session) throw new Error("Plik FIT nie zawiera podsumowania aktywności");
-  const sport = String(session.sport ?? "unknown");
-  if (sport !== "running") throw new NotARunError(sport);
+  const rawSport = String(session.sport ?? "unknown");
+  const sport = sportHint ?? normalizeSport(rawSport);
+  if (!sport) throw new NotARunError(rawSport);
 
   const records = (messages.recordMesgs ?? []) as Array<Record<string, unknown>>;
   const startMs = new Date(
@@ -102,7 +110,8 @@ export function parseRunFit(
     const speed = (r.enhancedSpeed ?? r.speed) as number | undefined;
     const cadence = r.cadence as number | undefined;
     if (cadence && (speed ?? 0) > MOVING_SPEED) {
-      cadences.push((cadence + ((r.fractionalCadence as number) ?? 0)) * 2);
+      const multiplier = sport === "cycling" ? 1 : 2;
+      cadences.push((cadence + ((r.fractionalCadence as number) ?? 0)) * multiplier);
     }
     recs.push({
       t: (new Date(ts).getTime() - startMs) / 1000,
@@ -120,8 +129,9 @@ export function parseRunFit(
     (session.totalTimerTime as number | undefined) ??
     (session.totalElapsedTime as number | undefined) ??
     0;
-  if (distanceM < 300 || durationS < 120) {
-    throw new Error("Bieg jest zbyt krótki, aby go analizować");
+  const min = MIN_BY_SPORT[sport];
+  if (distanceM < min.distanceM || durationS < min.durationS) {
+    throw new Error("Aktywność jest zbyt krótka, aby ją analizować");
   }
 
   const hrValues = recs
@@ -138,14 +148,16 @@ export function parseRunFit(
   const avgCadence = cadences.length
     ? Math.round(mean(cadences))
     : avgCadenceSession
-      ? Math.round(avgCadenceSession * 2)
+      ? Math.round(avgCadenceSession * (sport === "cycling" ? 1 : 2))
       : undefined;
 
   const best: Record<string, number> = {};
-  for (const d of BEST_DISTANCES) {
-    if (distanceM >= d) {
-      const t = bestEffort(recs, d);
-      if (t) best[d] = Math.round(t);
+  if (sport === "running") {
+    for (const d of BEST_DISTANCES) {
+      if (distanceM >= d) {
+        const t = bestEffort(recs, d);
+        if (t) best[d] = Math.round(t);
+      }
     }
   }
 
@@ -153,6 +165,7 @@ export function parseRunFit(
   return {
     id: idOverride ?? `fit-${startMs}`,
     source,
+    sport,
     startTime,
     distanceM: Math.round(distanceM),
     durationS: Math.round(durationS),
@@ -161,7 +174,7 @@ export function parseRunFit(
     avgSpeed: distanceM / durationS,
     avgCadence,
     ascentM: session.totalAscent as number | undefined,
-    decouplingPct: decoupling(recs),
+    decouplingPct: sport === "running" ? decoupling(recs) : undefined,
     hrHist: hrHistogram(recs),
     best: Object.keys(best).length ? best : undefined,
   };

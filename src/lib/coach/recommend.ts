@@ -60,7 +60,7 @@ function plural(n: number, one: string, few: string, many: string) {
 
 export const days = (n: number) => `${n} ${plural(n, "dzień", "dni", "dni")}`;
 
-function recommendForDay(
+export function recommendForDay(
   allRuns: RunSummary[],
   profile: Profile,
   fitness: FitnessSummary,
@@ -256,4 +256,25 @@ export function recommend(
     return { ...rec, forTomorrow: true };
   }
   return recommendForDay(runs, profile, fitness, now);
+}
+
+export function recommendTodayAndTomorrow(
+  runs: RunSummary[],
+  profile: Profile,
+  fitness: FitnessSummary,
+  now: Date = new Date(),
+): { today: Recommendation; tomorrow: Recommendation; ranToday: boolean } {
+  const todayStart = startOfDay(now);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const ranToday = runs.some((r) => daysBetween(new Date(r.startTime), now) === 0);
+  const today = {
+    ...recommendForDay(runs, profile, fitness, todayStart),
+    forTomorrow: false,
+  };
+  const tomorrow = {
+    ...recommendForDay(runs, profile, fitness, tomorrowStart),
+    forTomorrow: true,
+  };
+  return { today, tomorrow, ranToday };
 }

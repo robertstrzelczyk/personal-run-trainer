@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo-google-fonts/barlow-condensed": "^0.4.1",
+    "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
     "@garmin/fitsdk": "^21.221.0",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -11,6 +13,7 @@
     "expo-constants": "~58.0.16",
     "expo-crypto": "^58.0.8",
     "expo-font": "~58.0.12",
+    "expo-linear-gradient": "~58.0.4",
     "expo-linking": "~58.0.17",
     "expo-router": "~58.0.31",
     "expo-secure-store": "~58.0.3",
@@ -30,7 +33,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
   },
   "scripts": {
     "start": "expo start",
@@ -38,6 +42,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
     "eas:apk": "eas build -p android --profile preview"
   },
   "private": true

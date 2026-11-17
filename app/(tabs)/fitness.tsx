@@ -3,14 +3,15 @@ import { Card, Muted, Screen, Subtitle, Title } from "@/src/components/ui";
 import { useAuth } from "@/src/lib/auth-context";
 import { FORM_LABELS } from "@/src/lib/analytics/load";
 import { formatPace } from "@/src/lib/analytics/physiology";
+import { VO2_SOURCE_LABELS } from "@/src/lib/labels";
 import { useAnalysis } from "@/src/lib/use-analysis";
-import { colors } from "@/src/theme";
+import { colors, fonts } from "@/src/theme";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flex: 1, minWidth: "40%", gap: 2 }}>
-      <Text style={{ color: colors.muted, fontSize: 12 }}>{label}</Text>
-      <Text style={{ color: colors.text, fontWeight: "700", fontSize: 18 }}>{value}</Text>
+      <Text style={{ color: colors.muted, fontSize: 12, fontFamily: fonts.bodyMed }}>{label}</Text>
+      <Text style={{ color: colors.text, fontFamily: fonts.display, fontSize: 22 }}>{value}</Text>
     </View>
   );
 }
@@ -23,12 +24,12 @@ export default function FitnessScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 40 }}>
-        <Card>
+      <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <Card accent>
           <Title>Stan wytrenowania</Title>
           <Muted>
-            Venu 2 Plus nie pokazuje statusu jak Forerunner/Fenix. Tu liczymy formę z obciążenia (TRIMP →
-            CTL/ATL/TSB).
+            Venu 2 Plus nie pokazuje statusu jak Forerunner/Fenix. Tu liczymy formę z obciążenia
+            (TRIMP → CTL/ATL/TSB).
           </Muted>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
             <Stat label="Status" value={FORM_LABELS[form.status]} />
@@ -44,19 +45,13 @@ export default function FitnessScreen() {
           </View>
         </Card>
 
-        <Card>
+        <Card delay={80}>
           <Subtitle>Stopień wytrenowania (VO2 / VDOT)</Subtitle>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-            <Stat
-              label="VO2max"
-              value={fitness.vo2max ? fitness.vo2max.toFixed(1) : "—"}
-            />
-            <Stat label="Źródło" value={fitness.vo2Source} />
+            <Stat label="VO2max" value={fitness.vo2max ? fitness.vo2max.toFixed(1) : "—"} />
+            <Stat label="Źródło" value={VO2_SOURCE_LABELS[fitness.vo2Source]} />
             <Stat label="VDOT" value={fitness.vdot ? fitness.vdot.toFixed(1) : "—"} />
-            <Stat
-              label="Poziom"
-              value={fitness.level?.label ?? "—"}
-            />
+            <Stat label="Poziom" value={fitness.level?.label ?? "—"} />
           </View>
           {fitness.paces && (
             <View style={{ marginTop: 8, gap: 4 }}>
@@ -72,8 +67,8 @@ export default function FitnessScreen() {
           ))}
         </Card>
 
-        <Card>
-          <Subtitle>Efekt / efektywność biegu</Subtitle>
+        <Card delay={140}>
+          <Subtitle>Efektywność biegu</Subtitle>
           <Muted>{efficiency.headline}</Muted>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
             <Stat
@@ -81,7 +76,7 @@ export default function FitnessScreen() {
               value={efficiency.current ? efficiency.current.toFixed(2) : "—"}
             />
             <Stat
-              label="Dryf Pa:HR"
+              label="Dryf tempa/tętna"
               value={
                 efficiency.decoupling !== undefined ? `${efficiency.decoupling.toFixed(1)}%` : "—"
               }

@@ -1,4 +1,5 @@
 import { unzipSync } from "fflate";
+import { normalizeSport } from "../sport";
 import { garminHttp } from "./http";
 
 const DEFAULT_BASE = "https://personal.connectapi.garmin.com";
@@ -84,6 +85,7 @@ export interface GarminActivityItem {
   name?: string;
   distanceM?: number;
   durationS?: number;
+  sport: "running" | "walking" | "cycling";
 }
 
 function toIso(value: unknown): string | undefined {
@@ -93,7 +95,14 @@ function toIso(value: unknown): string | undefined {
   return isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
-export async function listRunningActivities(token: string, startDate: string, endDate: string) {
+const LIST_TYPES = ["running", "walking", "cycling"] as const;
+
+async function listActivitiesByType(
+  token: string,
+  startDate: string,
+  endDate: string,
+  activityType: (typeof LIST_TYPES)[number],
+): Promise<GarminActivityItem[]> {
   const out: GarminActivityItem[] = [];
   const pageSize = 50;
   for (let start = 0; start < 500; start += pageSize) {
@@ -102,7 +111,7 @@ export async function listRunningActivities(token: string, startDate: string, en
       limit: String(pageSize),
       startDate,
       endDate,
-      activityType: "running",
+      activityType,
     });
     const res = await request(`/activitylist-service/activities/search/activities?${qs}`, token);
     const data = (await res.json()) as unknown;
@@ -116,9 +125,10 @@ export async function listRunningActivities(token: string, startDate: string, en
         (raw.activityType as { typeKey?: string } | undefined)?.typeKey ??
           raw.activityType ??
           raw.sportType ??
-          "running",
+          activityType,
       );
-      if (!typeKey.includes("run")) continue;
+      const sport = normalizeSport(typeKey) ?? normalizeSport(activityType);
+      if (!sport) continue;
       const startTime = toIso(raw.startTimeGMT) ?? toIso(raw.startTimeLocal);
       if (!raw.activityId || !startTime) continue;
       out.push({
@@ -127,11 +137,26 @@ export async function listRunningActivities(token: string, startDate: string, en
         name: typeof raw.activityName === "string" ? raw.activityName : undefined,
         distanceM: typeof raw.distance === "number" ? raw.distance : undefined,
         durationS: typeof raw.duration === "number" ? raw.duration : undefined,
+        sport,
       });
     }
     if (list.length < pageSize) break;
   }
   return out;
+}
+
+/** Biegi, chodzenie i kolarstwo w zakresie dat. */
+export async function listRunningActivities(token: string, startDate: string, endDate: string) {
+  const batches = await Promise.all(
+    LIST_TYPES.map((type) => listActivitiesByType(token, startDate, endDate, type)),
+  );
+  const byId = new Map<string, GarminActivityItem>();
+  for (const item of batches.flat()) {
+    if (!byId.has(item.id)) byId.set(item.id, item);
+  }
+  return [...byId.values()].sort(
+    (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+  );
 }
 
 function isFit(bytes: Uint8Array) {

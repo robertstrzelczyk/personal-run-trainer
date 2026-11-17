@@ -2,40 +2,81 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
   type TextInputProps,
   type ViewProps,
 } from "react-native";
-import { colors } from "../theme";
+import { LinearGradient } from "expo-linear-gradient";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import { colors, fonts, radii, space } from "../theme";
 
 export function Screen({ children, style, ...rest }: ViewProps) {
   return (
     <View style={[styles.screen, style]} {...rest}>
+      <LinearGradient
+        colors={["#12352a", colors.bg, colors.bg]}
+        locations={[0, 0.28, 1]}
+        style={StyleSheet.absoluteFill}
+      />
       {children}
     </View>
   );
 }
 
-export function Card({ children, style, ...rest }: ViewProps) {
+export function Card({
+  children,
+  style,
+  accent = false,
+  delay = 0,
+  ...rest
+}: ViewProps & { accent?: boolean; delay?: number }) {
   return (
-    <View style={[styles.card, style]} {...rest}>
-      {children}
-    </View>
+    <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} style={style}>
+      <View style={[styles.card, accent && styles.cardAccent]} {...rest}>
+        {children}
+      </View>
+    </Animated.View>
   );
 }
 
-export function Title({ children }: { children: string }) {
-  return <Text style={styles.title}>{children}</Text>;
+export function HeroCard({ children, style }: ViewProps) {
+  return (
+    <Animated.View entering={FadeInDown.springify().damping(16)} style={style}>
+      <LinearGradient
+        colors={[colors.heroFrom, colors.heroTo]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.hero}
+      >
+        {children}
+      </LinearGradient>
+    </Animated.View>
+  );
 }
 
-export function Subtitle({ children }: { children: string }) {
-  return <Text style={styles.subtitle}>{children}</Text>;
+export function Title({ children, light = false }: { children: string; light?: boolean }) {
+  return (
+    <Text style={[styles.title, light && { color: "#fff" }]}>{children}</Text>
+  );
 }
 
-export function Muted({ children }: { children: string }) {
-  return <Text style={styles.muted}>{children}</Text>;
+export function Subtitle({ children, light = false }: { children: string; light?: boolean }) {
+  return (
+    <Text style={[styles.subtitle, light && { color: "rgba(255,255,255,0.92)" }]}>
+      {children}
+    </Text>
+  );
+}
+
+export function Muted({ children, light = false }: { children: string; light?: boolean }) {
+  return (
+    <Text style={[styles.muted, light && { color: "rgba(255,255,255,0.78)" }]}>
+      {children}
+    </Text>
+  );
 }
 
 export function Field(props: TextInputProps & { label: string }) {
@@ -47,6 +88,65 @@ export function Field(props: TextInputProps & { label: string }) {
         placeholderTextColor={colors.muted}
         style={[styles.input, style]}
         {...rest}
+      />
+    </View>
+  );
+}
+
+export function ChipSelect<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.chips}>
+        {options.map((opt) => {
+          const active = opt.value === value;
+          return (
+            <Pressable
+              key={opt.value}
+              onPress={() => onChange(opt.value)}
+              style={[styles.chip, active && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+export function ToggleRow({
+  label,
+  detail,
+  value,
+  onValueChange,
+}: {
+  label: string;
+  detail?: string;
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+}) {
+  return (
+    <View style={styles.toggleRow}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={styles.toggleLabel}>{label}</Text>
+        {detail ? <Text style={styles.muted}>{detail}</Text> : null}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{ false: colors.border, true: colors.primaryDeep }}
+        thumbColor={value ? colors.primary : "#ccc"}
       />
     </View>
   );
@@ -77,7 +177,8 @@ export function Button({
       <Text
         style={[
           styles.buttonText,
-          variant !== "primary" && { color: variant === "danger" ? colors.danger : colors.primary },
+          variant === "ghost" && { color: colors.primary },
+          variant === "danger" && { color: colors.danger },
         ]}
       >
         {title}
@@ -89,41 +190,110 @@ export function Button({
 export function Loading() {
   return (
     <View style={styles.loading}>
-      <ActivityIndicator color={colors.primary} />
+      <LinearGradient colors={["#12352a", colors.bg]} style={StyleSheet.absoluteFill} />
+      <ActivityIndicator color={colors.primary} size="large" />
+    </View>
+  );
+}
+
+export function Badge({ children, tone = "default" }: { children: string; tone?: "default" | "good" | "warn" }) {
+  const bg =
+    tone === "good" ? "rgba(155,225,93,0.18)" : tone === "warn" ? "rgba(253,176,34,0.18)" : "rgba(255,255,255,0.1)";
+  const color =
+    tone === "good" ? colors.good : tone === "warn" ? colors.warn : colors.text;
+  return (
+    <View style={[styles.badge, { backgroundColor: bg }]}>
+      <Text style={[styles.badgeText, { color }]}>{children}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, padding: 16, gap: 12 },
+  screen: { flex: 1, backgroundColor: colors.bg, padding: space.md, gap: space.sm },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: radii.lg,
+    padding: space.md,
+    gap: space.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 8,
   },
-  title: { fontSize: 22, fontWeight: "700", color: colors.text },
-  subtitle: { fontSize: 16, fontWeight: "600", color: colors.text },
-  muted: { fontSize: 14, color: colors.muted, lineHeight: 20 },
+  cardAccent: {
+    borderColor: "rgba(155,225,93,0.35)",
+    backgroundColor: colors.cardSoft,
+  },
+  hero: {
+    borderRadius: radii.xl,
+    padding: space.lg,
+    gap: space.sm,
+    overflow: "hidden",
+  },
+  title: {
+    fontSize: 28,
+    fontFamily: fonts.display,
+    color: colors.text,
+    letterSpacing: 0.3,
+  },
+  subtitle: {
+    fontSize: 17,
+    fontFamily: fonts.bodyBold,
+    color: colors.text,
+  },
+  muted: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: colors.muted,
+    lineHeight: 20,
+  },
   field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: "600", color: colors.muted },
+  label: {
+    fontSize: 12,
+    fontFamily: fonts.bodyMed,
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: radii.sm,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
     fontSize: 16,
+    fontFamily: fonts.body,
     color: colors.text,
-    backgroundColor: "#fff",
+    backgroundColor: colors.bgElevated,
+  },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.bgElevated,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: { color: colors.muted, fontFamily: fonts.bodyMed, fontSize: 13 },
+  chipTextActive: { color: colors.primaryText },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 4,
+  },
+  toggleLabel: {
+    fontFamily: fonts.bodyBold,
+    color: colors.text,
+    fontSize: 15,
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderRadius: radii.md,
+    paddingVertical: 13,
     alignItems: "center",
   },
   buttonGhost: {
@@ -132,10 +302,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   buttonDanger: {
-    backgroundColor: "#fff",
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: colors.danger,
   },
-  buttonText: { color: colors.primaryText, fontWeight: "700", fontSize: 15 },
-  loading: { flex: 1, alignItems: "center", justifyContent: "center" },
+  buttonText: {
+    color: colors.primaryText,
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+  },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
+  badge: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  badgeText: { fontFamily: fonts.bodyMed, fontSize: 12 },
 });

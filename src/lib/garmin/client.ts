@@ -1,6 +1,6 @@
 import type { RunSummary } from "../types";
 import { GarminHttpError, obtainToken } from "./personal-api";
-import { activitiesForDays, metricsForDays, runForActivity } from "./service";
+import { activitiesForDays, activityFromListItem, metricsForDays } from "./service";
 
 export interface SyncProgress {
   phase: "token" | "list" | "download" | "metrics";
@@ -75,7 +75,7 @@ export async function syncGarmin(options: {
     while (cursor < pending.length && !fatal) {
       const activity = pending[cursor++];
       try {
-        const result = await direct(() => runForActivity(token, activity.id));
+        const result = await direct(() => activityFromListItem(token, activity));
         if (result.run) runs.push(result.run);
       } catch (error) {
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {

@@ -1,11 +1,12 @@
 import { NotARunError, parseRunFit } from "../fit/parse-run";
-import type { RunSummary } from "../types";
+import type { ActivitySport, RunSummary } from "../types";
 import {
   downloadActivityFit,
   fetchHeartRateSettings,
   fetchVo2Max,
   GarminHttpError,
   listRunningActivities,
+  type GarminActivityItem,
 } from "./personal-api";
 import { clampDays, isoDate } from "./route-utils";
 
@@ -19,14 +20,22 @@ export async function activitiesForDays(token: string, rawDays: unknown) {
 export async function runForActivity(
   token: string,
   id: string,
+  sportHint?: ActivitySport,
 ): Promise<{ run?: RunSummary; skipped?: boolean; reason?: string }> {
   const bytes = await downloadActivityFit(token, id);
   try {
-    return { run: parseRunFit(bytes, "garmin", `garmin-${id}`) };
+    return { run: parseRunFit(bytes, "garmin", `garmin-${id}`, sportHint) };
   } catch (error) {
     if (error instanceof NotARunError) return { skipped: true, reason: error.message };
     throw new GarminHttpError(422, error instanceof Error ? error.message : "Nie udało się odczytać pliku FIT");
   }
+}
+
+export async function activityFromListItem(
+  token: string,
+  item: GarminActivityItem,
+): Promise<{ run?: RunSummary; skipped?: boolean; reason?: string }> {
+  return runForActivity(token, item.id, item.sport);
 }
 
 export async function metricsForDays(token: string, rawDays: unknown) {
