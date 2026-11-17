@@ -1,30 +1,25 @@
 # Trener biegowy (Expo) — Garmin Venu 2 Plus
 
-Natywna aplikacja Android (Expo) z kontem użytkownika, bazą Supabase i synchronizacją
-treningów z Garmin Connect przez **Personal API Key**. Uzupełnia brak analizy treningowej
-na Venu 2 Plus (forma, obciążenie, VO2/VDOT, trening na dziś).
+Lokalna aplikacja Expo (bez logowania / konta) — personalny trener biegowy z danymi
+z Garmin Connect przez **Personal API Key**. Dane zostają na urządzeniu (AsyncStorage +
+SecureStore). Uzupełnia to, czego Venu 2 Plus nie pokazuje: formę, obciążenie, strefy HR,
+statystyki i trening na dziś/jutro.
 
 ## Stack
 
 - Expo Router + TypeScript
-- Supabase Auth (e-mail/hasło) + Postgres (RLS)
-- Garmin Connect Personal API (tylko odczyt; bez logowania hasłem do Connect)
+- Dane lokalne (brak Supabase / logowania)
+- Garmin Connect Personal API (odczyt; klucz w SecureStore)
+- Vitest (unit testy analytics / coach / sync)
 - EAS Build → APK (`preview`)
 
 ## Konfiguracja
 
-1. Utwórz projekt w [Supabase](https://supabase.com) i w SQL Editor uruchom
-   [`supabase/schema.sql`](supabase/schema.sql).
-2. W Auth włącz e-mail/password.
-3. Skopiuj `.env.example` → `.env` i uzupełnij:
+1. Personal API Key: Garmin Connect (www) → Ustawienia → Personal API Key.
+2. W aplikacji wklejasz klucz w **Ustawienia** — trafia do SecureStore na telefonie.
+3. Sync pobiera biegi, chodzenie i kolarstwo (FIT), VO2 i ustawienia HR.
 
-```bash
-EXPO_PUBLIC_SUPABASE_URL=...
-EXPO_PUBLIC_SUPABASE_ANON_KEY=...
-```
-
-4. Personal API Key tworzysz w Garmin Connect (strona www, Ustawienia → Personal API Key).
-   W aplikacji wklejasz go w **Ustawienia** — klucz trafia do SecureStore na telefonie.
+Nie potrzebujesz pliku `.env` do podstawowego działania.
 
 ## Uruchomienie (dev)
 
@@ -33,7 +28,13 @@ npm install
 npx expo start
 ```
 
-## APK (EAS, konto robek137s-team)
+Testy:
+
+```bash
+npm test
+```
+
+## APK (EAS)
 
 Projekt: https://expo.dev/accounts/robek137s-team/projects/personal-run-trainer
 
@@ -42,21 +43,20 @@ npx eas-cli login
 npx eas-cli build -p android --profile preview
 ```
 
-Profil `preview` w `eas.json` buduje **APK**. Po zakończeniu pobierzesz go ze strony builda
-w Expo i zainstalujesz na telefonie (instalacja z nieznanych źródeł).
-
-Zmienne Supabase dodaj też w EAS (Environment → preview), jeśli chcesz je w buildzie produkcyjnym:
-`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
+Profil `preview` buduje **APK** do instalacji z nieznanych źródeł.
 
 ## Zakładki
 
-- **Dziś** — rekomendowany trening
+- **Dziś** — trening na dziś/jutro, skrót formy
 - **Forma** — CTL/ATL/TSB, VO2/VDOT, efektywność
-- **Biegi** — lista zsynchronizowanych aktywności
-- **Ustawienia** — konto, klucz Garmin, sync, profil
+- **Biegi** — lista aktywności + szczegóły biegu (strefy HR)
+- **Statystyki** — bieg / marsz / rower × tydzień / miesiąc / rok
+- **Ustawienia** — klucz Garmin, sync, profil, auto-sync
+
+Ekrany szczegółów: trening (`/workout/[when]`), aktywność (`/run/[id]`).
 
 ## Ograniczenia
 
-- Personal API jest read-only i do użytku osobistego; sync na żądanie.
+- Personal API jest read-only i do użytku osobistego; sync na żądanie (lub auto-sync).
 - Status formy / efekt to nasz model (TRIMP), nie oficjalny Firstbeat z zegarka.
 - Hasło Garmin Connect nie jest używane (regulamin / ryzyko blokady konta).
