@@ -3,7 +3,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
 import * as Sharing from "expo-sharing";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import {
   Button,
   Card,
@@ -36,8 +36,15 @@ export default function SettingsScreen() {
   const auth = useAuth();
   const [apiKey, setApiKey] = useState("");
   const [hasKey, setHasKey] = useState(false);
-  const [days, setDays] = useState("90");
+  /** 0 = cała historia (~10 lat wstecz, chunkowane zapytania) */
+  const [syncDays, setSyncDays] = useState(90);
   const [profile, setProfile] = useState<Profile>(auth.profile);
+
+  const SYNC_PRESETS: Array<{ days: number; label: string; detail: string }> = [
+    { days: 90, label: "90 dni", detail: "Szybki sync" },
+    { days: 365, label: "1 rok", detail: "Pełny sezon" },
+    { days: 0, label: "Cała historia", detail: "Od ~10 lat wstecz (dłużej)" },
+  ];
   const busy = auth.syncing;
   const progress = auth.syncProgress;
 
@@ -73,7 +80,7 @@ export default function SettingsScreen() {
       if (apiKey.trim()) await setGarminApiKey(apiKey);
       const result = await auth.runSync({
         apiKey: key,
-        days: Number(days) || 90,
+        days: syncDays,
       });
       if (!result) return;
       setHasKey(true);
@@ -212,13 +219,52 @@ export default function SettingsScreen() {
             secureTextEntry
             placeholder={hasKey ? "Wklej nowy klucz, aby wymienić" : "Wklej klucz"}
           />
-          <Field
-            testID="settings-sync-days"
-            label="Zakres historii (dni)"
-            value={days}
-            onChangeText={setDays}
-            keyboardType="number-pad"
-          />
+          <Muted>Zakres historii do pobrania</Muted>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {SYNC_PRESETS.map((p) => {
+              const active = syncDays === p.days;
+              return (
+                <Pressable
+                  key={p.label}
+                  testID={`settings-sync-range-${p.days}`}
+                  onPress={() => setSyncDays(p.days)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    backgroundColor: active ? colors.primary : colors.card,
+                    borderWidth: 1,
+                    borderColor: active ? colors.primary : colors.border,
+                    minWidth: "30%",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: fonts.bodyBold,
+                      color: active ? colors.primaryText : colors.text,
+                      fontSize: 13,
+                    }}
+                  >
+                    {p.label}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fonts.body,
+                      color: active ? colors.primaryText : colors.muted,
+                      fontSize: 11,
+                      marginTop: 2,
+                    }}
+                  >
+                    {p.detail}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Muted>
+            Personal API nie ma „od pierwszego treningu na zegarku” — bierzemy okna 28 dni wstecz
+            (przy całej historii ~10 lat). Duży sync może potrwać.
+          </Muted>
           <Button
             testID="settings-save-key"
             title="Zapisz klucz"

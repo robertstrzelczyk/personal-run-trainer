@@ -97,6 +97,9 @@ function toIso(value: unknown): string | undefined {
 
 const LIST_TYPES = ["running", "walking", "cycling"] as const;
 
+/** Garmin search pada ~przy >45–50 wynikach w oknie — trzymajemy bezpieczny limit strony. */
+const PAGE_SIZE = 40;
+
 async function listActivitiesByType(
   token: string,
   startDate: string,
@@ -104,11 +107,10 @@ async function listActivitiesByType(
   activityType: (typeof LIST_TYPES)[number],
 ): Promise<GarminActivityItem[]> {
   const out: GarminActivityItem[] = [];
-  const pageSize = 50;
-  for (let start = 0; start < 500; start += pageSize) {
+  for (let start = 0; start < 2000; start += PAGE_SIZE) {
     const qs = new URLSearchParams({
       start: String(start),
-      limit: String(pageSize),
+      limit: String(PAGE_SIZE),
       startDate,
       endDate,
       activityType,
@@ -140,13 +142,12 @@ async function listActivitiesByType(
         sport,
       });
     }
-    if (list.length < pageSize) break;
+    if (list.length < PAGE_SIZE) break;
   }
   return out;
 }
 
-/** Biegi, chodzenie i kolarstwo w zakresie dat. */
-export async function listRunningActivities(token: string, startDate: string, endDate: string) {
+async function listRunningActivitiesOnce(token: string, startDate: string, endDate: string) {
   const batches = await Promise.all(
     LIST_TYPES.map((type) => listActivitiesByType(token, startDate, endDate, type)),
   );
@@ -154,6 +155,67 @@ export async function listRunningActivities(token: string, startDate: string, en
   for (const item of batches.flat()) {
     if (!byId.has(item.id)) byId.set(item.id, item);
   }
+  return [...byId.values()];
+}
+
+const DAY_MS = 86_400_000;
+/** Okno listy aktywności — wystarczająco wąskie, żeby nie wpadać w limit ~50 wyników. */
+export const ACTIVITY_LIST_CHUNK_DAYS = 28;
+/** Praktyczny „cały zakres” (~10 lat wstecz) — Personal API nie ma „od pierwszego treningu”. */
+export const FULL_HISTORY_DAYS = 3650;
+
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysBetweenIso(a: string, b: string): number {
+  const ms = new Date(`${b}T12:00:00.000Z`).getTime() - new Date(`${a}T12:00:00.000Z`).getTime();
+  return Math.max(0, Math.round(ms / DAY_MS));
+}
+
+/**
+ * Lista aktywności w zakresie — cięta na okna 28 dni; przy HTTP 500 dzieli okno na pół.
+ * Dzięki temu da się synchrować lata historii mimo limitów Garmin search.
+ */
+export async function listRunningActivities(
+  token: string,
+  startDate: string,
+  endDate: string,
+): Promise<GarminActivityItem[]> {
+  const byId = new Map<string, GarminActivityItem>();
+
+  async function collect(from: string, to: string): Promise<void> {
+    if (from > to) return;
+    try {
+      const items = await listRunningActivitiesOnce(token, from, to);
+      for (const item of items) {
+        if (!byId.has(item.id)) byId.set(item.id, item);
+      }
+    } catch (error) {
+      if (!(error instanceof GarminHttpError) || error.status !== 500) throw error;
+      const span = daysBetweenIso(from, to);
+      if (span <= 0) return;
+      if (span === 1) {
+        // jedno-dniowe okno też pada — pomijamy, żeby nie blokować całego syncu
+        return;
+      }
+      const mid = addDaysIso(from, Math.floor(span / 2));
+      const midPrev = addDaysIso(mid, -1);
+      await collect(from, midPrev);
+      await collect(mid, to);
+    }
+  }
+
+  let cursor = startDate;
+  while (cursor <= endDate) {
+    const chunkEnd = addDaysIso(cursor, ACTIVITY_LIST_CHUNK_DAYS - 1);
+    const to = chunkEnd < endDate ? chunkEnd : endDate;
+    await collect(cursor, to);
+    cursor = addDaysIso(to, 1);
+  }
+
   return [...byId.values()].sort(
     (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
   );

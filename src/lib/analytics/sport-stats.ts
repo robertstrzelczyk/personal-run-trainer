@@ -3,7 +3,7 @@ import type { ActivitySport, RunSummary } from "../types";
 import { DAY_MS } from "./physiology";
 import { startOfDay } from "./load";
 
-export type StatsPeriod = "week" | "month" | "year";
+export type StatsPeriod = "week" | "month" | "year" | "all";
 
 /** Filtr podsumowania: wszystkie sporty albo jeden. */
 export type SportFilter = "all" | ActivitySport;
@@ -51,7 +51,17 @@ export function totalForSportFilter(
 
 const SPORTS: ActivitySport[] = ["running", "walking", "cycling"];
 
-function periodStart(period: StatsPeriod, now: Date): Date {
+function earliestRunDay(runs: RunSummary[], now: Date): Date {
+  if (!runs.length) return startOfDay(now);
+  let min = Infinity;
+  for (const r of runs) {
+    const t = new Date(r.startTime).getTime();
+    if (t < min) min = t;
+  }
+  return startOfDay(new Date(min));
+}
+
+function periodStart(period: StatsPeriod, now: Date, runs: RunSummary[] = []): Date {
   const end = startOfDay(now);
   if (period === "week") {
     // poniedziałek jako start tygodnia
@@ -61,12 +71,16 @@ function periodStart(period: StatsPeriod, now: Date): Date {
   if (period === "month") {
     return new Date(end.getFullYear(), end.getMonth(), 1);
   }
+  if (period === "all") {
+    return earliestRunDay(runs, now);
+  }
   return new Date(end.getFullYear(), 0, 1);
 }
 
 function periodLabel(period: StatsPeriod): string {
   if (period === "week") return "Ten tydzień";
   if (period === "month") return "Ten miesiąc";
+  if (period === "all") return "Cały zakres";
   return "Ten rok";
 }
 
@@ -102,7 +116,7 @@ export function sportStatsForPeriod(
   period: StatsPeriod,
   now: Date = new Date(),
 ): PeriodSportStats {
-  const from = periodStart(period, now);
+  const from = periodStart(period, now, runs);
   const to = now;
   const sports = distanceBySport(runs, from, to);
   return {
@@ -116,9 +130,18 @@ export function sportStatsForPeriod(
 }
 
 export function allPeriodStats(runs: RunSummary[], now: Date = new Date()): PeriodSportStats[] {
-  return (["week", "month", "year"] as StatsPeriod[]).map((p) =>
+  return (["week", "month", "year", "all"] as StatsPeriod[]).map((p) =>
     sportStatsForPeriod(runs, p, now),
   );
+}
+
+/** Ile dni wstecz pokazać na wykresie dziennym dla danego okresu. */
+export function chartDaysForPeriod(period: StatsPeriod, from: Date, to: Date): number {
+  if (period === "week") return 7;
+  if (period === "month") return 30;
+  if (period === "year") return 90;
+  const span = Math.ceil((startOfDay(to).getTime() - startOfDay(from).getTime()) / DAY_MS) + 1;
+  return Math.min(180, Math.max(7, span));
 }
 
 export function formatKm(distanceM: number): string {

@@ -5,6 +5,7 @@ import { Card, Muted, Screen, Subtitle, Title } from "@/src/components/ui";
 import { useAuth } from "@/src/lib/auth-context";
 import {
   allPeriodStats,
+  chartDaysForPeriod,
   dailyDistanceSeries,
   formatKm,
   sportFilterLabel,
@@ -20,13 +21,8 @@ const PERIODS: Array<{ id: StatsPeriod; label: string }> = [
   { id: "week", label: "Tydzień" },
   { id: "month", label: "Miesiąc" },
   { id: "year", label: "Rok" },
+  { id: "all", label: "Cały zakres" },
 ];
-
-const PERIOD_DAYS: Record<StatsPeriod, number> = {
-  week: 7,
-  month: 30,
-  year: 90,
-};
 
 const SPORT_FILTERS: Array<{ id: SportFilter; label: string }> = [
   { id: "all", label: "Wszystkie" },
@@ -52,9 +48,10 @@ export default function StatsScreen() {
   const heroColor =
     sportFilter === "all" ? colors.primary : SPORT_COLORS[sportFilter];
 
+  const chartDays = chartDaysForPeriod(period, current.from, current.to);
   const daily = useMemo(
-    () => dailyDistanceSeries(runs, PERIOD_DAYS[period], new Date(), sportFilter),
-    [runs, period, sportFilter],
+    () => dailyDistanceSeries(runs, chartDays, new Date(), sportFilter),
+    [runs, chartDays, sportFilter],
   );
 
   const distanceBars = useMemo(
@@ -173,11 +170,13 @@ export default function StatsScreen() {
           <Subtitle>Dystans w czasie</Subtitle>
           <Muted>
             {`${
-              period === "year"
-                ? "Ostatnie 90 dni (dziennie)"
-                : period === "month"
-                  ? "Ostatnie 30 dni"
-                  : "Ostatnie 7 dni"
+              period === "all"
+                ? `Ostatnie ${chartDays} dni z zakresu (wykres)`
+                : period === "year"
+                  ? "Ostatnie 90 dni (dziennie)"
+                  : period === "month"
+                    ? "Ostatnie 30 dni"
+                    : "Ostatnie 7 dni"
             }${sportFilter !== "all" ? ` · ${SPORT_LABELS[sportFilter]}` : ""}`}
           </Muted>
           <SimpleBarChart

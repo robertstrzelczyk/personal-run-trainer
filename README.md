@@ -19,6 +19,8 @@ statystyki z filtrem sportu, plan 7 dni / blok do startu, RPE, deload, pogodę i
 1. Personal API Key: Garmin Connect (www) → Ustawienia → Personal API Key.
 2. W aplikacji wklejasz klucz w **Ustawienia** (lub w onboardingu) — SecureStore.
 3. Sync pobiera biegi, chodzenie i kolarstwo (FIT + uproszczony GPS), VO2 i HR.
+   Zakres: **90 dni / 1 rok / cała historia** (~10 lat wstecz). Lista aktywności jest
+   cięta na okna 28 dni (Garmin search pada przy zbyt wielu wynikach w jednym zakresie).
 
 ## Uruchomienie
 
