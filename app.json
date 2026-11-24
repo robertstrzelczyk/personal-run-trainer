@@ -2,7 +2,7 @@
   "expo": {
     "name": "Trener biegowy",
     "slug": "personal-run-trainer",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "description": "Lokalny trener biegowy pod Garmin: sugestie dopasowane do Twoich biegów (plan vs wykonanie), forma, plan 7 dni i blok do startu, filtr sportów, RPE/deload, pogoda, mapa, backup JSON, eksport FIT.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

@@ -43,7 +43,8 @@ export default function SettingsScreen() {
   const SYNC_PRESETS: Array<{ days: number; label: string; detail: string }> = [
     { days: 90, label: "90 dni", detail: "Szybki sync" },
     { days: 365, label: "1 rok", detail: "Pełny sezon" },
-    { days: 0, label: "Cała historia", detail: "Od ~10 lat wstecz (dłużej)" },
+    { days: 730, label: "2 lata", detail: "Bezpieczna paczka" },
+    { days: 0, label: "Cała historia", detail: "~10 lat, wolniej" },
   ];
   const busy = auth.syncing;
   const progress = auth.syncProgress;
@@ -262,8 +263,9 @@ export default function SettingsScreen() {
             })}
           </View>
           <Muted>
-            Personal API nie ma „od pierwszego treningu na zegarku” — bierzemy okna 28 dni wstecz
-            (przy całej historii ~10 lat). Duży sync może potrwać.
+            Przy limicie Garmin (429) synchronizuj paczkami: najpierw 90 dni, potem 1 rok / 2 lata,
+            na końcu cała historia. Już pobrane aktywności są pomijane. Sync zwalnia zapytania i
+            wznawia po 429.
           </Muted>
           <Button
             testID="settings-save-key"

@@ -1,6 +1,7 @@
 import { unzipSync } from "fflate";
 import { normalizeSport } from "../sport";
 import { garminHttp } from "./http";
+import { pause, withRetry429 } from "./rate-limit";
 
 const DEFAULT_BASE = "https://personal.connectapi.garmin.com";
 
@@ -41,16 +42,18 @@ function explain(status: number): string {
 }
 
 async function request(path: string, token: string, accept = "application/json") {
-  let res: Response;
-  try {
-    res = await garminHttp(`${baseUrl()}${path}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: accept },
-    });
-  } catch {
-    throw new GarminHttpError(502, "Nie udało się połączyć z Garmin Connect.");
-  }
-  if (!res.ok) throw new GarminHttpError(res.status, explain(res.status));
-  return res;
+  return withRetry429(async () => {
+    let res: Response;
+    try {
+      res = await garminHttp(`${baseUrl()}${path}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: accept },
+      });
+    } catch {
+      throw new GarminHttpError(502, "Nie udało się połączyć z Garmin Connect.");
+    }
+    if (!res.ok) throw new GarminHttpError(res.status, explain(res.status));
+    return res;
+  });
 }
 
 export async function obtainToken(apiKey: string): Promise<string> {
@@ -148,12 +151,13 @@ async function listActivitiesByType(
 }
 
 async function listRunningActivitiesOnce(token: string, startDate: string, endDate: string) {
-  const batches = await Promise.all(
-    LIST_TYPES.map((type) => listActivitiesByType(token, startDate, endDate, type)),
-  );
+  // Sekwencyjnie (nie Promise.all) — 3 typy naraz mocno windują 429.
   const byId = new Map<string, GarminActivityItem>();
-  for (const item of batches.flat()) {
-    if (!byId.has(item.id)) byId.set(item.id, item);
+  for (const type of LIST_TYPES) {
+    const items = await listActivitiesByType(token, startDate, endDate, type);
+    for (const item of items) {
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    }
   }
   return [...byId.values()];
 }
@@ -213,6 +217,7 @@ export async function listRunningActivities(
     const chunkEnd = addDaysIso(cursor, ACTIVITY_LIST_CHUNK_DAYS - 1);
     const to = chunkEnd < endDate ? chunkEnd : endDate;
     await collect(cursor, to);
+    await pause(200);
     cursor = addDaysIso(to, 1);
   }
 

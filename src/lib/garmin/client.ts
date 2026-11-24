@@ -1,5 +1,6 @@
 import type { RunSummary } from "../types";
 import { GarminHttpError, obtainToken } from "./personal-api";
+import { pause } from "./rate-limit";
 import { activitiesForDays, activityFromListItem, metricsForDays } from "./service";
 
 export interface SyncProgress {
@@ -69,28 +70,31 @@ export async function syncGarmin(options: {
   const warnings: string[] = [];
   onProgress({ phase: "download", done, total: pending.length });
 
-  let cursor = 0;
+  // Jedna aktywność naraz + krótka pauza — unikamy 429 przy dużym syncu.
   let fatal: ApiError | undefined;
-  const worker = async () => {
-    while (cursor < pending.length && !fatal) {
-      const activity = pending[cursor++];
-      try {
-        const result = await direct(() => activityFromListItem(token, activity));
-        if (result.run) runs.push(result.run);
-      } catch (error) {
-        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-          fatal = error;
-          return;
-        }
-        failed++;
-      } finally {
-        done++;
-        onProgress({ phase: "download", done, total: pending.length });
+  for (const activity of pending) {
+    if (fatal) break;
+    try {
+      const result = await direct(() => activityFromListItem(token, activity));
+      if (result.run) runs.push(result.run);
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        fatal = error;
+        break;
       }
+      if (error instanceof ApiError && error.status === 429) {
+        warnings.push(
+          "Garmin ograniczył zapytania w trakcie pobierania. Zapisuję to, co już jest — dokończ sync później (paczka / większy zakres).",
+        );
+        break;
+      }
+      failed++;
+    } finally {
+      done++;
+      onProgress({ phase: "download", done, total: pending.length });
     }
-  };
-
-  await Promise.all(Array.from({ length: Math.min(3, Math.max(1, pending.length)) }, () => worker()));
+    await pause(150);
+  }
   if (fatal) throw fatal;
 
   onProgress({ phase: "metrics" });

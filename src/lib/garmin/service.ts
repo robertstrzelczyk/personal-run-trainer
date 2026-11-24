@@ -9,6 +9,7 @@ import {
   listRunningActivities,
   type GarminActivityItem,
 } from "./personal-api";
+import { pause } from "./rate-limit";
 import { clampDays, isoDate } from "./route-utils";
 
 /** Sentinel: synchro od ~10 lat wstecz (cała dostępna historia w praktyce). */
@@ -62,6 +63,7 @@ async function fetchVo2Chunked(token: string, start: Date, end: Date) {
     } catch {
       // pojedyncze okno VO2 może paść — nie blokujemy syncu aktywności
     }
+    await pause(200);
     cursor = new Date(to.getTime() + 86_400_000);
   }
   return [...out.entries()]
