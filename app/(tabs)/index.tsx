@@ -241,6 +241,11 @@ export default function TodayScreen() {
               {`Wykonane: ${(todayAdherence.doneDistanceM / 1000).toFixed(1)} km · ${formatMinutes(todayAdherence.doneDurationS)}`}
             </Muted>
           )}
+          {focus.adaptation?.suppressQuality || (focus.adaptation && focus.adaptation.volumeScale < 1) ? (
+            <Muted>
+              Sugestia na dziś już uwzględnia Twoje ostatnie biegi (objętość / jakość).
+            </Muted>
+          ) : null}
         </Card>
 
         {!ranToday && (

@@ -2,6 +2,10 @@ import { classifyRun, daysBetween, formState, loadSeries, startOfDay, type FormS
 import { DAY_MS, formatMinutes, median, pacesFromVdot } from "../analytics/physiology";
 import type { FitnessSummary } from "../analytics/fitness";
 import type { Goal, Profile, RaceEvent, RunFeedback, RunSummary, Workout } from "../types";
+import {
+  computeExecutionAdaptation,
+  type ExecutionAdaptation,
+} from "./adapt-from-runs";
 import { isDeloadActive, recentAvgRpe } from "./deload";
 import {
   activeRace,
@@ -31,6 +35,11 @@ import {
   type BuildContext,
 } from "./workouts";
 
+export interface RecommendOptions {
+  /** gdy false — bez pętli plan↔wykonanie (do historii / adaptacji) */
+  adapt?: boolean;
+}
+
 export interface Recommendation {
   /** dzień, którego dotyczy rekomendacja */
   forDate: Date;
@@ -42,6 +51,7 @@ export interface Recommendation {
   daysSinceLast: number | undefined;
   racePhase?: RacePhaseInfo;
   targetAssessment?: TargetAssessment;
+  adaptation?: ExecutionAdaptation;
 }
 
 const GOAL_LONG_CAP: Record<Goal, number> = {
@@ -85,7 +95,9 @@ export function recommendForDay(
   day: Date,
   races: RaceEvent[] = [],
   feedback: Record<string, RunFeedback> = {},
+  options: RecommendOptions = {},
 ): Recommendation {
+  const adapt = options.adapt !== false;
   const dayStart = startOfDay(day);
   const runs = allRuns
     .filter((r) => new Date(r.startTime).getTime() < dayStart.getTime())
@@ -105,6 +117,13 @@ export function recommendForDay(
       ? assessRaceTarget(selected, fitness.vdot)
       : undefined;
 
+  const adaptation = adapt
+    ? computeExecutionAdaptation(allRuns, profile, dayStart, (past) =>
+        recommendForDay(allRuns, profile, fitness, past, races, feedback, { adapt: false })
+          .workout,
+      )
+    : undefined;
+
   const paces = fitness.paces ?? pacesFromVdot(35);
   const ctx: BuildContext = { profile: coachingProfile, paces };
   const reasons: string[] = [];
@@ -119,6 +138,9 @@ export function recommendForDay(
   }
   if (targetAssessment) {
     reasons.push(targetAssessment.rationale);
+  }
+  if (adaptation?.reasons.length) {
+    for (const r of adaptation.reasons) reasons.push(r);
   }
 
   const last28 = runs.filter((r) => dayStart.getTime() - new Date(r.startTime).getTime() <= 28 * DAY_MS);
@@ -149,9 +171,10 @@ export function recommendForDay(
     daysSinceLast,
     racePhase,
     targetAssessment,
+    adaptation,
   });
 
-  const volumeFactor = racePhase?.volumeFactor ?? 1;
+  const volumeFactor = (racePhase?.volumeFactor ?? 1) * (adaptation?.volumeScale ?? 1);
   const baseMinutes = clamp(
     roundTo5(
       ((median(
@@ -192,6 +215,16 @@ export function recommendForDay(
     reasons.push(
       `Ostatnie RPE jest wysokie (średnio ${avgRpe.toFixed(1)}/5) — dziś lżej, żeby nie kumulować zmęczenia.`,
     );
+    return finish(recoveryRun(ctx, clamp(baseMinutes - 5, 20, 40)), restDay());
+  }
+
+  if (
+    adaptation?.preferRecovery &&
+    form.status !== "overload" &&
+    racePhase?.phase !== "race" &&
+    racePhase?.phase !== "recovery"
+  ) {
+    reasons.push("Dopasowanie do ostatnich biegów: dziś regeneracja zamiast budowania obciążenia.");
     return finish(recoveryRun(ctx, clamp(baseMinutes - 5, 20, 40)), restDay());
   }
 
@@ -306,10 +339,14 @@ export function recommendForDay(
     return finish(longRun(ctx, target, progressive), easyRun(ctx, baseMinutes, false));
   }
 
+  const hardGapNeeded = 3 + (adaptation?.extraHardGap ?? 0);
   const qualityReady =
-    daysSinceHard >= 3 || (daysSinceHard >= 2 && form.tsb > 3) || daysSinceHard === 99;
+    daysSinceHard >= hardGapNeeded ||
+    (daysSinceHard >= hardGapNeeded - 1 && form.tsb > 3) ||
+    daysSinceHard === 99;
   const acwrHigh = form.acwr !== undefined && form.acwr > 1.35;
-  const allowQuality = racePhase?.allowQuality !== false;
+  const allowQuality =
+    racePhase?.allowQuality !== false && adaptation?.suppressQuality !== true;
   if (allowQuality && qualityReady && form.tsb > -12 && !acwrHigh && weeklyKm >= 8) {
     const hardCount = last28.filter(
       (r) => intensities.get(r.id)!.isHard && !intensities.get(r.id)!.isLong,

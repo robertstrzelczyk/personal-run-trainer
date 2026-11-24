@@ -43,7 +43,7 @@ Ekrany: trening (`/workout/[when]` — share/FIT), aktywność (`/run/[id]` — 
 - Rekomendacja dziś/jutro (TRIMP, limity dni, rotacja jakości, cel czasowy startu).
 - Kalendarz startów z fazami Budowa → Peak → Taper → start → regeneracja.
 - Plan 7 dni + **plan blokowy** 8–16 tyg. do aktywnego startu.
-- Plan vs wykonanie (lista Biegi + karta Dziś).
+- Plan vs wykonanie (lista Biegi + karta Dziś) — **wpływa na kolejne sugestie** (bez osobnego ręcznego planu): skip jakości / za ciężki easy → mniej jakości i objętości.
 - RPE 1–5 po aktywności; wysokie średnie RPE → lżejszy dzień.
 - Deload (3/7 dni) w Ustawieniach.
 - Eksport tekst / FIT; kopia zapasowa JSON.
