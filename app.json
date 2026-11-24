@@ -2,8 +2,8 @@
   "expo": {
     "name": "Trener biegowy",
     "slug": "personal-run-trainer",
-    "version": "1.1.0",
-    "description": "Lokalny trener biegowy pod Garmin: sync FIT, forma CTL/ATL/TSB, plan 7 dni, cel czasowy startu, plan vs wykonanie oraz eksport treningu (tekst/FIT) na zegarek.",
+    "version": "1.2.0",
+    "description": "Lokalny trener biegowy pod Garmin: forma, plan 7 dni i blok do startu, filtr sportów w statystykach, RPE/deload, pogoda, mapa trasy, backup JSON oraz eksport treningu FIT.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "personalruntrainer",

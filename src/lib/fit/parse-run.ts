@@ -1,6 +1,10 @@
 import { Decoder, Stream } from "@garmin/fitsdk";
 import { normalizeSport } from "../sport";
-import type { ActivitySport, RunSource, RunSummary } from "../types";
+import type { ActivitySport, RunSource, RunSummary, TrackPoint } from "../types";
+
+/** FIT semicircles → degrees */
+const SEMI_TO_DEG = 180 / 2 ** 31;
+const MAX_TRACK_POINTS = 80;
 
 export class NotARunError extends Error {
   constructor(sport: string) {
@@ -104,6 +108,7 @@ export function parseRunFit(
 
   const recs: Rec[] = [];
   const cadences: number[] = [];
+  const rawTrack: TrackPoint[] = [];
   for (const r of records) {
     const ts = r.timestamp as Date | undefined;
     if (!ts) continue;
@@ -112,6 +117,16 @@ export function parseRunFit(
     if (cadence && (speed ?? 0) > MOVING_SPEED) {
       const multiplier = sport === "cycling" ? 1 : 2;
       cadences.push((cadence + ((r.fractionalCadence as number) ?? 0)) * multiplier);
+    }
+    const latSemi = r.positionLat as number | undefined;
+    const lonSemi = r.positionLong as number | undefined;
+    if (
+      typeof latSemi === "number" &&
+      typeof lonSemi === "number" &&
+      Math.abs(latSemi) < 2 ** 31 &&
+      Math.abs(lonSemi) < 2 ** 31
+    ) {
+      rawTrack.push({ lat: latSemi * SEMI_TO_DEG, lon: lonSemi * SEMI_TO_DEG });
     }
     recs.push({
       t: (new Date(ts).getTime() - startMs) / 1000,
@@ -161,6 +176,7 @@ export function parseRunFit(
     }
   }
 
+  const track = downsampleTrack(rawTrack, MAX_TRACK_POINTS);
   const startTime = new Date(startMs).toISOString();
   return {
     id: idOverride ?? `fit-${startMs}`,
@@ -177,5 +193,16 @@ export function parseRunFit(
     decouplingPct: sport === "running" ? decoupling(recs) : undefined,
     hrHist: hrHistogram(recs),
     best: Object.keys(best).length ? best : undefined,
+    track: track.length >= 2 ? track : undefined,
   };
+}
+
+function downsampleTrack(points: TrackPoint[], max: number): TrackPoint[] {
+  if (points.length <= max) return points;
+  const out: TrackPoint[] = [];
+  const step = (points.length - 1) / (max - 1);
+  for (let i = 0; i < max; i++) {
+    out.push(points[Math.round(i * step)]!);
+  }
+  return out;
 }

@@ -1,4 +1,7 @@
 import { Link } from "expo-router";
+import { Directory, File, Paths } from "expo-file-system";
+import * as DocumentPicker from "expo-document-picker";
+import * as Sharing from "expo-sharing";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text } from "react-native";
 import {
@@ -16,7 +19,9 @@ import { clearGarminApiKey, getGarminApiKey, setGarminApiKey } from "@/src/lib/g
 import { AUTO_SYNC_HOURS } from "@/src/lib/garmin/apply-sync";
 import type { SyncProgress } from "@/src/lib/garmin/client";
 import { useAuth } from "@/src/lib/auth-context";
+import { deloadUntilFromToday } from "@/src/lib/coach/deload";
 import { GOAL_OPTIONS, SEX_OPTIONS } from "@/src/lib/labels";
+import type { LocalBackup } from "@/src/lib/local-store";
 import type { Goal, Profile, Sex } from "@/src/lib/types";
 import { colors, fonts } from "@/src/theme";
 
@@ -93,6 +98,80 @@ export default function SettingsScreen() {
     }
   }
 
+  async function onExportBackup() {
+    try {
+      const backup = await auth.exportBackup();
+      const dir = new Directory(Paths.cache, "backups");
+      if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+      const name = `trener-backup-${backup.exportedAt.slice(0, 10)}.json`;
+      const file = new File(dir, name);
+      if (file.exists) file.delete();
+      file.create();
+      await file.write(JSON.stringify(backup, null, 2));
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert("Backup", "Udostępnianie niedostępne na tym urządzeniu.");
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: "application/json",
+        dialogTitle: "Eksport kopii zapasowej",
+      });
+    } catch (e) {
+      Alert.alert("Backup", e instanceof Error ? e.message : "Eksport nieudany");
+    }
+  }
+
+  async function onImportBackup() {
+    try {
+      const pick = await DocumentPicker.getDocumentAsync({
+        type: "application/json",
+        copyToCacheDirectory: true,
+      });
+      if (pick.canceled || !pick.assets?.[0]) return;
+      const asset = pick.assets[0];
+      const file = new File(asset.uri);
+      const text = await file.text();
+      const parsed = JSON.parse(text) as LocalBackup;
+      Alert.alert(
+        "Przywrócić kopię?",
+        `Nadpisze lokalne dane (${parsed.runs?.length ?? 0} aktywności).`,
+        [
+          { text: "Anuluj", style: "cancel" },
+          {
+            text: "Przywróć",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await auth.importBackup(parsed);
+                setProfile(auth.profile);
+                Alert.alert("OK", "Kopia przywrócona.");
+              } catch (e) {
+                Alert.alert("Błąd", e instanceof Error ? e.message : "Import nieudany");
+              }
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      Alert.alert("Import", e instanceof Error ? e.message : "Nie udało się wczytać pliku");
+    }
+  }
+
+  async function enableDeload(daysN: number) {
+    const until = deloadUntilFromToday(daysN);
+    const next = { ...profile, deloadUntil: until };
+    setProfile(next);
+    await auth.saveProfile(next);
+    Alert.alert("Deload", `Tryb deload do ${until}.`);
+  }
+
+  async function clearDeload() {
+    const next = { ...profile, deloadUntil: undefined };
+    setProfile(next);
+    await auth.saveProfile(next);
+    Alert.alert("Deload", "Tryb deload wyłączony.");
+  }
+
   return (
     <Screen testID="settings-screen">
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
@@ -113,6 +192,8 @@ export default function SettingsScreen() {
             value={auth.autoSync}
             onValueChange={(v) => void auth.setAutoSync(v)}
           />
+          <Button title="Eksportuj kopię JSON" variant="ghost" onPress={onExportBackup} />
+          <Button title="Przywróć z JSON" variant="ghost" onPress={onImportBackup} />
         </Card>
 
         <Card delay={60}>
@@ -182,6 +263,34 @@ export default function SettingsScreen() {
           </Pressable>
         </Link>
 
+        <Link href="/plan" asChild>
+          <Pressable>
+            {({ pressed }) => (
+              <Card delay={100} style={{ opacity: pressed ? 0.9 : 1 }}>
+                <Subtitle>Plan do startu (blok)</Subtitle>
+                <Muted>
+                  Podgląd tygodni do aktywnego startu (fazy, km, typy treningów) — do 16 tygodni przy
+                  maratonie.
+                </Muted>
+              </Card>
+            )}
+          </Pressable>
+        </Link>
+
+        <Card delay={110}>
+          <Subtitle>Deload / regeneracja</Subtitle>
+          <Muted>
+            {profile.deloadUntil
+              ? `Aktywny do ${profile.deloadUntil} — coach bez jakości.`
+              : "Wyłączony. Włącz na kilka dni po kontuzji lub przeciążeniu."}
+          </Muted>
+          <Button title="Deload 3 dni" variant="ghost" onPress={() => enableDeload(3)} />
+          <Button title="Deload 7 dni" variant="ghost" onPress={() => enableDeload(7)} />
+          {profile.deloadUntil ? (
+            <Button title="Wyłącz deload" variant="danger" onPress={clearDeload} />
+          ) : null}
+        </Card>
+
         <Card delay={120}>
           <Subtitle>Profil treningowy</Subtitle>
           <Field
@@ -234,8 +343,8 @@ export default function SettingsScreen() {
         <Card delay={180}>
           <Subtitle>O aplikacji</Subtitle>
           <Text style={{ color: colors.muted, lineHeight: 20, fontFamily: fonts.body }}>
-            Osobisty trener dla Garmin Venu 2 Plus: forma, obciążenie, VO2/VDOT oraz trening na dziś i
-            jutro. Dane lokalne na telefonie; klucz Garmin w bezpiecznym magazynie.
+            Osobisty trener dla Garmin Venu 2 Plus: forma, obciążenie, VO2/VDOT, plan 7 dni / blok do
+            startu, eksport FIT oraz kopia JSON. Dane lokalne na telefonie.
           </Text>
         </Card>
       </ScrollView>

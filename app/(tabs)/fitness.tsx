@@ -25,8 +25,8 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export default function FitnessScreen() {
-  const { runs, profile, vo2, races } = useAuth();
-  const { fitness, form, efficiency, series } = useAnalysis(runs, profile, vo2, races);
+  const { runs, profile, vo2, races, feedback } = useAuth();
+  const { fitness, form, efficiency, series } = useAnalysis(runs, profile, vo2, races, feedback);
   const [range, setRange] = useChartRange(28);
   const loadWindow = useChartWindow(series, range);
   const last7 = series.slice(-7).reduce((s, p) => s + p.load, 0);

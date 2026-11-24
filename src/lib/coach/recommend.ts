@@ -1,7 +1,8 @@
 import { classifyRun, daysBetween, formState, loadSeries, startOfDay, type FormState } from "../analytics/load";
 import { DAY_MS, formatMinutes, median, pacesFromVdot } from "../analytics/physiology";
 import type { FitnessSummary } from "../analytics/fitness";
-import type { Goal, Profile, RaceEvent, RunSummary, Workout } from "../types";
+import type { Goal, Profile, RaceEvent, RunFeedback, RunSummary, Workout } from "../types";
+import { isDeloadActive, recentAvgRpe } from "./deload";
 import {
   activeRace,
   formatCountdown,
@@ -83,6 +84,7 @@ export function recommendForDay(
   fitness: FitnessSummary,
   day: Date,
   races: RaceEvent[] = [],
+  feedback: Record<string, RunFeedback> = {},
 ): Recommendation {
   const dayStart = startOfDay(day);
   const runs = allRuns
@@ -172,6 +174,25 @@ export function recommendForDay(
     reasons.push(`Ostatni bieg był ${days(daysSinceLast)} temu. Wracamy stopniowo, bez intensywności.`);
     reasons.push("Po przerwie mięśnie i ścięgna adaptują się wolniej niż układ krążenia.");
     return finish(easyRun(ctx, clamp(baseMinutes - 10, 20, 35), false));
+  }
+
+  if (isDeloadActive(profile, dayStart)) {
+    reasons.push(
+      `Tryb deload aktywny do ${profile.deloadUntil} — bez jakości, priorytet regeneracji.`,
+    );
+    if (daysSinceLast === 0 || form.tsb < 5) {
+      return finish(restDay(), recoveryRun(ctx, 25));
+    }
+    return finish(recoveryRun(ctx, clamp(baseMinutes, 20, 35)), restDay());
+  }
+
+  const runStarts = new Map(runs.map((r) => [r.id, r.startTime]));
+  const avgRpe = recentAvgRpe(feedback, runStarts, dayStart);
+  if (avgRpe !== undefined && avgRpe >= 4.3) {
+    reasons.push(
+      `Ostatnie RPE jest wysokie (średnio ${avgRpe.toFixed(1)}/5) — dziś lżej, żeby nie kumulować zmęczenia.`,
+    );
+    return finish(recoveryRun(ctx, clamp(baseMinutes - 5, 20, 40)), restDay());
   }
 
   // Dzień startu — rest / race note
@@ -366,15 +387,16 @@ export function recommend(
   fitness: FitnessSummary,
   now: Date = new Date(),
   races: RaceEvent[] = [],
+  feedback: Record<string, RunFeedback> = {},
 ): Recommendation {
   const ranToday = runs.some((r) => daysBetween(new Date(r.startTime), now) === 0);
   if (ranToday) {
     const tomorrow = startOfDay(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const rec = recommendForDay(runs, profile, fitness, tomorrow, races);
+    const rec = recommendForDay(runs, profile, fitness, tomorrow, races, feedback);
     return { ...rec, forTomorrow: true };
   }
-  return recommendForDay(runs, profile, fitness, now, races);
+  return recommendForDay(runs, profile, fitness, now, races, feedback);
 }
 
 export function recommendTodayAndTomorrow(
@@ -383,17 +405,18 @@ export function recommendTodayAndTomorrow(
   fitness: FitnessSummary,
   now: Date = new Date(),
   races: RaceEvent[] = [],
+  feedback: Record<string, RunFeedback> = {},
 ): { today: Recommendation; tomorrow: Recommendation; ranToday: boolean } {
   const todayStart = startOfDay(now);
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
   const ranToday = runs.some((r) => daysBetween(new Date(r.startTime), now) === 0);
   const today = {
-    ...recommendForDay(runs, profile, fitness, todayStart, races),
+    ...recommendForDay(runs, profile, fitness, todayStart, races, feedback),
     forTomorrow: false,
   };
   const tomorrow = {
-    ...recommendForDay(runs, profile, fitness, tomorrowStart, races),
+    ...recommendForDay(runs, profile, fitness, tomorrowStart, races, feedback),
     forTomorrow: true,
   };
   return { today, tomorrow, ranToday };

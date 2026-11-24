@@ -9,15 +9,20 @@ import {
   type ReactNode,
 } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import type { Profile, RaceEvent, RunSummary } from "./types";
+import type { Profile, RaceEvent, RunFeedback, RunSummary } from "./types";
 import {
+  applyLocalBackup,
+  buildLocalBackup,
   loadLocalState,
   saveLocalAutoSync,
+  saveLocalFeedback,
   saveLocalLastSync,
   saveLocalProfile,
   saveLocalRaces,
   saveLocalRuns,
   saveLocalVo2,
+  saveOnboardingDone,
+  type LocalBackup,
 } from "./local-store";
 import { getGarminApiKey } from "./garmin-key";
 import {
@@ -45,6 +50,8 @@ interface AppStateValue {
   runs: RunSummary[];
   vo2: Array<{ date: string; value: number }>;
   races: RaceEvent[];
+  feedback: Record<string, RunFeedback>;
+  onboardingDone: boolean;
   lastSync: string | null;
   autoSync: boolean;
   syncing: boolean;
@@ -58,6 +65,10 @@ interface AppStateValue {
   setLastSyncLocal: (iso: string | null) => void;
   setAutoSync: (enabled: boolean) => Promise<void>;
   saveRaces: (races: RaceEvent[]) => Promise<void>;
+  setRunFeedback: (runId: string, next: RunFeedback) => Promise<void>;
+  completeOnboarding: () => Promise<void>;
+  exportBackup: () => Promise<LocalBackup>;
+  importBackup: (backup: LocalBackup) => Promise<void>;
   runSync: (options?: {
     days?: number;
     apiKey?: string;
@@ -71,20 +82,40 @@ interface AppStateValue {
 
 const AuthContext = createContext<AppStateValue | null>(null);
 
+function centroidFromRuns(runs: RunSummary[]): { lat: number; lon: number } | undefined {
+  for (const r of [...runs].reverse()) {
+    const track = r.track;
+    if (!track?.length) continue;
+    const mid = track[Math.floor(track.length / 2)];
+    if (mid) return mid;
+  }
+  return undefined;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [vo2, setVo2] = useState<Array<{ date: string; value: number }>>([]);
   const [races, setRaces] = useState<RaceEvent[]>([]);
+  const [feedback, setFeedback] = useState<Record<string, RunFeedback>>({});
+  const [onboardingDone, setOnboardingDone] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [autoSync, setAutoSyncState] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const syncingRef = useRef(false);
-  const stateRef = useRef({ profile, runs, vo2, races, lastSync, autoSync });
-  stateRef.current = { profile, runs, vo2, races, lastSync, autoSync };
+  const stateRef = useRef({
+    profile,
+    runs,
+    vo2,
+    races,
+    feedback,
+    lastSync,
+    autoSync,
+  });
+  stateRef.current = { profile, runs, vo2, races, feedback, lastSync, autoSync };
 
   const refreshData = useCallback(async () => {
     const local = await loadLocalState();
@@ -92,6 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRuns(local.runs);
     setVo2(local.vo2);
     setRaces(local.races);
+    setFeedback(local.feedback);
+    setOnboardingDone(local.onboardingDone);
     setLastSync(local.lastSync);
     setAutoSyncState(local.autoSync);
   }, []);
@@ -142,6 +175,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await saveLocalRaces(next);
   }, []);
 
+  const setRunFeedback = useCallback(async (runId: string, next: RunFeedback) => {
+    setFeedback((prev) => {
+      const merged = { ...prev, [runId]: { ...prev[runId], ...next } };
+      void saveLocalFeedback(merged);
+      return merged;
+    });
+  }, []);
+
+  const completeOnboarding = useCallback(async () => {
+    setOnboardingDone(true);
+    await saveOnboardingDone(true);
+  }, []);
+
+  const exportBackup = useCallback(async () => buildLocalBackup(), []);
+
+  const importBackup = useCallback(async (backup: LocalBackup) => {
+    await applyLocalBackup(backup);
+    await refreshData();
+  }, [refreshData]);
+
   const runSync = useCallback(
     async (options?: { days?: number; apiKey?: string; silent?: boolean }) => {
       if (syncingRef.current) return null;
@@ -168,12 +221,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           runs: current.runs,
           vo2: current.vo2,
         });
-        setProfile(merged.profile);
+        const geo = centroidFromRuns(merged.runs);
+        const profileWithGeo =
+          geo && (merged.profile.lastLat !== geo.lat || merged.profile.lastLon !== geo.lon)
+            ? { ...merged.profile, lastLat: geo.lat, lastLon: geo.lon }
+            : merged.profile;
+        setProfile(profileWithGeo);
         setRuns(merged.runs);
         setVo2(merged.vo2);
         setLastSync(merged.lastSync);
         await Promise.all([
-          saveLocalProfile(merged.profile),
+          saveLocalProfile(profileWithGeo),
           saveLocalRuns(merged.runs),
           saveLocalVo2(merged.vo2),
           saveLocalLastSync(merged.lastSync),
@@ -224,6 +282,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       runs,
       vo2,
       races,
+      feedback,
+      onboardingDone,
       lastSync,
       autoSync,
       syncing,
@@ -237,6 +297,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLastSyncLocal,
       setAutoSync,
       runSync,
+      setRunFeedback,
+      completeOnboarding,
+      exportBackup,
+      importBackup,
       signIn: async () => {
         throw new Error("Logowanie jest tymczasowo wyłączone.");
       },
@@ -253,6 +317,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       runs,
       vo2,
       races,
+      feedback,
+      onboardingDone,
       lastSync,
       autoSync,
       syncing,
@@ -265,6 +331,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLastSyncLocal,
       setAutoSync,
       runSync,
+      setRunFeedback,
+      completeOnboarding,
+      exportBackup,
+      importBackup,
       saveProfile,
       saveRaces,
     ],

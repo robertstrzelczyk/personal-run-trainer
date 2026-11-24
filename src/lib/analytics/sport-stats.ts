@@ -5,6 +5,9 @@ import { startOfDay } from "./load";
 
 export type StatsPeriod = "week" | "month" | "year";
 
+/** Filtr podsumowania: wszystkie sporty albo jeden. */
+export type SportFilter = "all" | ActivitySport;
+
 export interface SportDistanceTotal {
   sport: ActivitySport;
   label: string;
@@ -20,6 +23,30 @@ export interface PeriodSportStats {
   to: Date;
   sports: SportDistanceTotal[];
   totalDistanceM: number;
+}
+
+export function sportFilterLabel(filter: SportFilter): string {
+  if (filter === "all") return "łącznie we wszystkich sportach";
+  return `tylko ${SPORT_LABELS[filter].toLowerCase()}`;
+}
+
+export function totalForSportFilter(
+  stats: PeriodSportStats,
+  filter: SportFilter,
+): { distanceM: number; durationS: number; count: number } {
+  if (filter === "all") {
+    return {
+      distanceM: stats.totalDistanceM,
+      durationS: stats.sports.reduce((s, x) => s + x.durationS, 0),
+      count: stats.sports.reduce((s, x) => s + x.count, 0),
+    };
+  }
+  const row = stats.sports.find((s) => s.sport === filter);
+  return {
+    distanceM: row?.distanceM ?? 0,
+    durationS: row?.durationS ?? 0,
+    count: row?.count ?? 0,
+  };
 }
 
 const SPORTS: ActivitySport[] = ["running", "walking", "cycling"];
@@ -112,6 +139,7 @@ export function dailyDistanceSeries(
   runs: RunSummary[],
   days: number,
   now: Date = new Date(),
+  filter: SportFilter = "all",
 ): DailyDistancePoint[] {
   const end = startOfDay(now);
   const byDay = new Map<string, DailyDistancePoint>();
@@ -127,13 +155,14 @@ export function dailyDistanceSeries(
     });
   }
   for (const run of runs) {
+    const sport = activitySport(run);
+    if (filter !== "all" && sport !== filter) continue;
     const t = startOfDay(run.startTime);
     const key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
     const bucket = byDay.get(key);
     if (!bucket) continue;
     const km = run.distanceM / 1000;
     bucket.distanceKm += km;
-    const sport = activitySport(run);
     if (sport === "running") bucket.runningKm += km;
     else if (sport === "walking") bucket.walkingKm += km;
     else bucket.cyclingKm += km;

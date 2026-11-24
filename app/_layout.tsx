@@ -8,7 +8,7 @@ import {
   DMSans_700Bold,
 } from "@expo-google-fonts/dm-sans";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -21,6 +21,26 @@ import { colors } from "@/src/theme";
 export { ErrorBoundary } from "expo-router";
 
 SplashScreen.preventAutoHideAsync();
+
+function OnboardingGate({ children }: { children: React.ReactNode }) {
+  const { ready, onboardingDone, runs, lastSync } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!ready) return;
+    // Pomiń onboarding, jeśli user już ma dane (upgrade z wcześniejszej wersji)
+    const skip = onboardingDone || runs.length > 0 || Boolean(lastSync);
+    const onOnboarding = segments[0] === "onboarding";
+    if (!skip && !onOnboarding) {
+      router.replace("/onboarding");
+    } else if (skip && onOnboarding) {
+      router.replace("/(tabs)");
+    }
+  }, [ready, onboardingDone, runs.length, lastSync, segments, router]);
+
+  return <>{children}</>;
+}
 
 function ReadyGate({ children }: { children: React.ReactNode }) {
   const { ready } = useAuth();
@@ -37,7 +57,7 @@ function ReadyGate({ children }: { children: React.ReactNode }) {
   }, [ready, fontsLoaded]);
 
   if (!ready || !fontsLoaded) return <Loading />;
-  return <>{children}</>;
+  return <OnboardingGate>{children}</OnboardingGate>;
 }
 
 export default function RootLayout() {
@@ -53,6 +73,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen
             name="run/[id]"
             options={{
@@ -91,6 +112,17 @@ export default function RootLayout() {
             options={{
               headerShown: true,
               title: "Start",
+              headerStyle: { backgroundColor: colors.bgElevated },
+              headerTintColor: colors.text,
+              headerTitleStyle: { fontWeight: "700" },
+              contentStyle: { backgroundColor: colors.bg },
+            }}
+          />
+          <Stack.Screen
+            name="plan/index"
+            options={{
+              headerShown: true,
+              title: "Plan do startu",
               headerStyle: { backgroundColor: colors.bgElevated },
               headerTintColor: colors.text,
               headerTitleStyle: { fontWeight: "700" },

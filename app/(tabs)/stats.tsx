@@ -7,8 +7,13 @@ import {
   allPeriodStats,
   dailyDistanceSeries,
   formatKm,
+  sportFilterLabel,
+  totalForSportFilter,
+  type SportFilter,
   type StatsPeriod,
 } from "@/src/lib/analytics/sport-stats";
+import { SPORT_LABELS } from "@/src/lib/sport";
+import type { ActivitySport } from "@/src/lib/types";
 import { colors, fonts } from "@/src/theme";
 
 const PERIODS: Array<{ id: StatsPeriod; label: string }> = [
@@ -23,22 +28,33 @@ const PERIOD_DAYS: Record<StatsPeriod, number> = {
   year: 90,
 };
 
-const SPORT_COLORS = {
+const SPORT_FILTERS: Array<{ id: SportFilter; label: string }> = [
+  { id: "all", label: "Wszystkie" },
+  { id: "running", label: SPORT_LABELS.running },
+  { id: "walking", label: SPORT_LABELS.walking },
+  { id: "cycling", label: SPORT_LABELS.cycling },
+];
+
+const SPORT_COLORS: Record<ActivitySport, string> = {
   running: colors.primary,
   walking: colors.accent,
   cycling: "#5b8def",
-} as const;
+};
 
 export default function StatsScreen() {
   const { runs } = useAuth();
   const [period, setPeriod] = useState<StatsPeriod>("week");
+  const [sportFilter, setSportFilter] = useState<SportFilter>("all");
   const stats = useMemo(() => allPeriodStats(runs), [runs]);
   const current = stats.find((s) => s.period === period)!;
+  const summary = totalForSportFilter(current, sportFilter);
   const maxDist = Math.max(...current.sports.map((s) => s.distanceM), 1);
+  const heroColor =
+    sportFilter === "all" ? colors.primary : SPORT_COLORS[sportFilter];
 
   const daily = useMemo(
-    () => dailyDistanceSeries(runs, PERIOD_DAYS[period]),
-    [runs, period],
+    () => dailyDistanceSeries(runs, PERIOD_DAYS[period], new Date(), sportFilter),
+    [runs, period, sportFilter],
   );
 
   const distanceBars = useMemo(
@@ -46,9 +62,9 @@ export default function StatsScreen() {
       daily.map((d) => ({
         value: Math.round(d.distanceKm * 100) / 100,
         label: d.date.slice(8),
-        frontColor: colors.primary,
+        frontColor: heroColor,
       })),
-    [daily],
+    [daily, heroColor],
   );
 
   const sportBars = useMemo(
@@ -67,8 +83,8 @@ export default function StatsScreen() {
         <Card accent>
           <Title>Statystyki</Title>
           <Muted>
-            Dystans biegania, chodzenia i kolarstwa. Po synchronizacji Garmin zobaczysz tu też spacery i
-            rower.
+            Dystans biegania, chodzenia i kolarstwa. Wybierz sport, żeby podsumowanie tygodnia /
+            miesiąca / roku pokazywało tylko tę aktywność.
           </Muted>
         </Card>
 
@@ -105,25 +121,64 @@ export default function StatsScreen() {
           })}
         </View>
 
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {SPORT_FILTERS.map((f) => {
+            const active = f.id === sportFilter;
+            return (
+              <Pressable
+                key={f.id}
+                testID={`stats-sport-${f.id}`}
+                accessibilityLabel={f.label}
+                onPress={() => setSportFilter(f.id)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 999,
+                  backgroundColor: active ? colors.primary : colors.card,
+                  borderWidth: 1,
+                  borderColor: active ? colors.primary : colors.border,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: fonts.bodyBold,
+                    color: active ? colors.primaryText : colors.muted,
+                    fontSize: 12,
+                  }}
+                >
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <Card>
           <Subtitle>{current.label}</Subtitle>
           <Muted>
             {`${current.from.toLocaleDateString("pl-PL")} – ${current.to.toLocaleDateString("pl-PL")}`}
           </Muted>
-          <Text style={{ fontFamily: fonts.display, fontSize: 36, color: colors.primary, marginTop: 4 }}>
-            {formatKm(current.totalDistanceM)}
+          <Text style={{ fontFamily: fonts.display, fontSize: 36, color: heroColor, marginTop: 4 }}>
+            {formatKm(summary.distanceM)}
           </Text>
-          <Muted>łącznie we wszystkich sportach</Muted>
+          <Muted>{sportFilterLabel(sportFilter)}</Muted>
+          {summary.count > 0 ? (
+            <Muted>{`${summary.count} aktywności`}</Muted>
+          ) : (
+            <Muted>Brak aktywności w tym filtrze.</Muted>
+          )}
         </Card>
 
         <Card delay={40}>
           <Subtitle>Dystans w czasie</Subtitle>
           <Muted>
-            {period === "year"
-              ? "Ostatnie 90 dni (dziennie)"
-              : period === "month"
-                ? "Ostatnie 30 dni"
-                : "Ostatnie 7 dni"}
+            {`${
+              period === "year"
+                ? "Ostatnie 90 dni (dziennie)"
+                : period === "month"
+                  ? "Ostatnie 30 dni"
+                  : "Ostatnie 7 dni"
+            }${sportFilter !== "all" ? ` · ${SPORT_LABELS[sportFilter]}` : ""}`}
           </Muted>
           <SimpleBarChart
             data={distanceBars}
@@ -137,62 +192,75 @@ export default function StatsScreen() {
           <SimpleBarChart data={sportBars} emptyLabel="Brak danych sportowych." />
         </Card>
 
-        {current.sports.map((sport, i) => (
-          <Card key={sport.sport} delay={80 + i * 40}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
-              <Subtitle>{sport.label}</Subtitle>
-              <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.text }}>
-                {formatKm(sport.distanceM)}
-              </Text>
-            </View>
-            <Muted>{`${sport.count} aktywności`}</Muted>
-            <View
-              style={{
-                height: 12,
-                borderRadius: 999,
-                backgroundColor: colors.bgElevated,
-                overflow: "hidden",
-                marginTop: 8,
-              }}
+        {current.sports.map((sport, i) => {
+          const dimmed = sportFilter !== "all" && sportFilter !== sport.sport;
+          return (
+            <Card
+              key={sport.sport}
+              delay={80 + i * 40}
+              style={dimmed ? { opacity: 0.45 } : undefined}
             >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
+                <Subtitle>{sport.label}</Subtitle>
+                <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.text }}>
+                  {formatKm(sport.distanceM)}
+                </Text>
+              </View>
+              <Muted>{`${sport.count} aktywności`}</Muted>
               <View
                 style={{
-                  width: `${Math.max(sport.distanceM > 0 ? 4 : 0, (sport.distanceM / maxDist) * 100)}%`,
-                  height: "100%",
-                  backgroundColor: SPORT_COLORS[sport.sport],
+                  height: 12,
                   borderRadius: 999,
+                  backgroundColor: colors.bgElevated,
+                  overflow: "hidden",
+                  marginTop: 8,
                 }}
-              />
-            </View>
-          </Card>
-        ))}
+              >
+                <View
+                  style={{
+                    width: `${Math.max(sport.distanceM > 0 ? 4 : 0, (sport.distanceM / maxDist) * 100)}%`,
+                    height: "100%",
+                    backgroundColor: SPORT_COLORS[sport.sport],
+                    borderRadius: 999,
+                  }}
+                />
+              </View>
+            </Card>
+          );
+        })}
 
         <Card delay={200}>
           <Subtitle>Porównanie okresów</Subtitle>
-          {stats.map((s) => (
-            <View
-              key={s.period}
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                paddingVertical: 8,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.border,
-              }}
-            >
-              <Text style={{ color: colors.text, fontFamily: fonts.bodyMed }}>{s.label}</Text>
-              <Text style={{ color: colors.primary, fontFamily: fonts.bodyBold }}>
-                {formatKm(s.totalDistanceM)}
-              </Text>
+          <Muted>{sportFilterLabel(sportFilter)}</Muted>
+          {stats.map((s) => {
+            const tot = totalForSportFilter(s, sportFilter);
+            return (
+              <View
+                key={s.period}
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  paddingVertical: 8,
+                  borderBottomWidth: 1,
+                  borderBottomColor: colors.border,
+                }}
+              >
+                <Text style={{ color: colors.text, fontFamily: fonts.bodyMed }}>{s.label}</Text>
+                <Text style={{ color: heroColor, fontFamily: fonts.bodyBold }}>
+                  {formatKm(tot.distanceM)}
+                </Text>
+              </View>
+            );
+          })}
+          {sportFilter === "all" && (
+            <View style={{ marginTop: 8, gap: 4 }}>
+              {stats.map((s) => (
+                <Muted key={`${s.period}-break`}>
+                  {`${s.label}: bieg ${formatKm(s.sports[0].distanceM)} · chód ${formatKm(s.sports[1].distanceM)} · rower ${formatKm(s.sports[2].distanceM)}`}
+                </Muted>
+              ))}
             </View>
-          ))}
-          <View style={{ marginTop: 8, gap: 4 }}>
-            {stats.map((s) => (
-              <Muted key={`${s.period}-break`}>
-                {`${s.label}: bieg ${formatKm(s.sports[0].distanceM)} · chód ${formatKm(s.sports[1].distanceM)} · rower ${formatKm(s.sports[2].distanceM)}`}
-              </Muted>
-            ))}
-          </View>
+          )}
         </Card>
       </ScrollView>
     </Screen>

@@ -27,8 +27,8 @@ const WORKOUT_TYPE_PL: Record<string, string> = {
 export default function WorkoutDetailScreen() {
   const { when } = useLocalSearchParams<{ when: string }>();
   const router = useRouter();
-  const { runs, profile, vo2, races } = useAuth();
-  const { schedule, form } = useAnalysis(runs, profile, vo2, races);
+  const { runs, profile, vo2, races, feedback } = useAuth();
+  const { schedule, form } = useAnalysis(runs, profile, vo2, races, feedback);
   const [busy, setBusy] = useState<"text" | "fit" | null>(null);
 
   const key = when === "tomorrow" ? "tomorrow" : when === "today" ? "today" : null;

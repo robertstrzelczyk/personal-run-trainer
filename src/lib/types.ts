@@ -12,7 +12,20 @@ export interface Profile {
   restHr: number;
   goal: Goal;
   daysPerWeek: number;
+  /** YYYY-MM-DD — do tego dnia włącznie tryb deload (tylko easy/recovery/rest) */
+  deloadUntil?: string;
+  /** opcjonalna lokalizacja do pogody (z ostatniej aktywności z GPS) */
+  lastLat?: number;
+  lastLon?: number;
 }
+
+/** Subiektywna ocena wysiłku po aktywności (osobno od sync Garmin). */
+export interface RunFeedback {
+  rpe?: 1 | 2 | 3 | 4 | 5;
+  note?: string;
+}
+
+export type TrackPoint = { lat: number; lon: number };
 
 export interface RaceEvent {
   id: string;
@@ -57,6 +70,8 @@ export interface RunSummary {
   /** sekundy spędzone na danym tętnie, klucz = bpm */
   hrHist?: Record<string, number>;
   best?: BestEfforts;
+  /** rzadka trasa GPS (do mapy), max ~80 punktów */
+  track?: TrackPoint[];
 }
 
 export type WorkoutType =

@@ -1,10 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { TrackMap } from "@/src/components/TrackMap";
 import { Badge, Button, Card, Muted, Screen, Subtitle, Title } from "@/src/components/ui";
 import { useAuth } from "@/src/lib/auth-context";
 import { formatDuration, formatPace, paceOfRun } from "@/src/lib/analytics/physiology";
 import { formatZoneMinutes, runHrStats } from "@/src/lib/analytics/hr-zones";
 import { activitySport, SPORT_LABELS } from "@/src/lib/sport";
+import type { RunFeedback } from "@/src/lib/types";
 import { colors, fonts } from "@/src/theme";
 
 const BEST_LABELS: Record<string, string> = {
@@ -26,8 +28,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 export default function RunDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { runs, profile } = useAuth();
+  const { runs, profile, feedback, setRunFeedback } = useAuth();
   const run = runs.find((r) => r.id === id);
+  const fb = run ? feedback[run.id] : undefined;
 
   if (!run) {
     return (
@@ -157,6 +160,50 @@ export default function RunDetailScreen() {
               ))}
           </Card>
         )}
+
+        {run.track && run.track.length >= 2 ? (
+          <Card delay={140}>
+            <Subtitle>Trasa</Subtitle>
+            <Muted>Zapis GPS z FIT (uproszczony).</Muted>
+            <TrackMap track={run.track} />
+          </Card>
+        ) : null}
+
+        <Card delay={160}>
+          <Subtitle>Samopoczucie (RPE)</Subtitle>
+          <Muted>1 = bardzo lekko, 5 = maksymalnie ciężko. Wpływa na kolejne rekomendacje.</Muted>
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+            {([1, 2, 3, 4, 5] as const).map((n) => {
+              const active = fb?.rpe === n;
+              return (
+                <Pressable
+                  key={n}
+                  onPress={() =>
+                    void setRunFeedback(run.id, { rpe: n } satisfies RunFeedback)
+                  }
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    alignItems: "center",
+                    backgroundColor: active ? colors.primary : colors.bgElevated,
+                    borderWidth: 1,
+                    borderColor: active ? colors.primary : colors.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: fonts.bodyBold,
+                      color: active ? colors.primaryText : colors.text,
+                    }}
+                  >
+                    {n}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Card>
 
         <Button title="Wróć do listy" variant="ghost" onPress={() => router.back()} />
       </ScrollView>

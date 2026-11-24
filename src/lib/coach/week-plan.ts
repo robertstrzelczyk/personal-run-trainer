@@ -1,7 +1,7 @@
 import type { FitnessSummary } from "../analytics/fitness";
 import { startOfDay } from "../analytics/load";
 import { DAY_MS } from "../analytics/physiology";
-import type { Profile, RaceEvent, RunSummary, WorkoutType } from "../types";
+import type { Profile, RaceEvent, RunFeedback, RunSummary, WorkoutType } from "../types";
 import { recommendForDay, type Recommendation } from "./recommend";
 
 export interface WeekDayPlan {
@@ -35,6 +35,7 @@ export function buildWeekPlan(
   fitness: FitnessSummary,
   now: Date = new Date(),
   races: RaceEvent[] = [],
+  feedback: Record<string, RunFeedback> = {},
 ): WeekPlan {
   const today = startOfDay(now);
   const days: WeekDayPlan[] = [];
@@ -43,7 +44,7 @@ export function buildWeekPlan(
 
   for (let i = 0; i < 7; i++) {
     const date = new Date(today.getTime() + i * DAY_MS);
-    const recommendation = recommendForDay(runs, profile, fitness, date, races);
+    const recommendation = recommendForDay(runs, profile, fitness, date, races, feedback);
     const planned = recommendation.workout.totalM / 1000;
     if (recommendation.workout.type !== "rest") {
       plannedKm += planned;

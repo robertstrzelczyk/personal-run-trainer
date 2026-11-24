@@ -1,4 +1,5 @@
 import { Link } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   Badge,
@@ -18,6 +19,7 @@ import { VO2_SOURCE_LABELS } from "@/src/lib/labels";
 import { useAnalysis } from "@/src/lib/use-analysis";
 import type { Recommendation } from "@/src/lib/coach/recommend";
 import type { WorkoutType } from "@/src/lib/types";
+import { fetchTodayWeather, type DayWeather } from "@/src/lib/weather";
 import { colors, fonts } from "@/src/theme";
 
 const WORKOUT_SHORT: Record<WorkoutType, string> = {
@@ -72,16 +74,35 @@ function WorkoutSummary({
 }
 
 export default function TodayScreen() {
-  const { runs, profile, vo2, syncing, lastSync, races } = useAuth();
-  const { schedule, form, fitness, racePhase, preparing, weekPlan, todayAdherence } = useAnalysis(
-    runs,
-    profile,
-    vo2,
-    races,
-  );
+  const { runs, profile, vo2, syncing, lastSync, races, feedback } = useAuth();
+  const {
+    schedule,
+    form,
+    fitness,
+    racePhase,
+    preparing,
+    weekPlan,
+    todayAdherence,
+    blockPlan,
+    deload,
+  } = useAnalysis(runs, profile, vo2, races, feedback);
   const { today, tomorrow, ranToday } = schedule;
   const focus = ranToday ? tomorrow : today;
   const focusWhen = ranToday ? "tomorrow" : "today";
+  const [weather, setWeather] = useState<DayWeather | undefined>();
+
+  useEffect(() => {
+    const lat = profile.lastLat;
+    const lon = profile.lastLon;
+    if (lat === undefined || lon === undefined) return;
+    let cancelled = false;
+    void fetchTodayWeather(lat, lon).then((w) => {
+      if (!cancelled) setWeather(w);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile.lastLat, profile.lastLon]);
 
   if (!runs.length) {
     return (
@@ -119,6 +140,21 @@ export default function TodayScreen() {
           </Muted>
         )}
 
+        {deload ? (
+          <Card>
+            <Badge tone="warn">Deload</Badge>
+            <Muted>{`Tryb regeneracji do ${profile.deloadUntil} — bez jakości.`}</Muted>
+          </Card>
+        ) : null}
+
+        {weather ? (
+          <Card>
+            <Subtitle>Pogoda</Subtitle>
+            <Muted>{weather.label}</Muted>
+            {weather.coachingNote ? <Muted>{weather.coachingNote}</Muted> : null}
+          </Card>
+        ) : null}
+
         <Link href="/races" asChild>
           <Pressable>
             {({ pressed }) => (
@@ -149,6 +185,22 @@ export default function TodayScreen() {
             )}
           </Pressable>
         </Link>
+
+        {blockPlan ? (
+          <Link href="/plan" asChild>
+            <Pressable>
+              {({ pressed }) => (
+                <Card style={{ opacity: pressed ? 0.9 : 1 }}>
+                  <Subtitle>Plan blokowy do startu</Subtitle>
+                  <Muted>
+                    {`${blockPlan.weeks.length} tyg. · ~${blockPlan.totalKm.toFixed(0)} km · ${blockPlan.totalTrainingDays} treningów`}
+                  </Muted>
+                  <Muted>Zobacz tygodnie i fazy →</Muted>
+                </Card>
+              )}
+            </Pressable>
+          </Link>
+        ) : null}
 
         <Link href={`/workout/${focusWhen}`} asChild>
           <Pressable>
