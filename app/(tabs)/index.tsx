@@ -12,10 +12,34 @@ import {
 import { useAuth } from "@/src/lib/auth-context";
 import { formatMinutes } from "@/src/lib/analytics/physiology";
 import { FORM_LABELS } from "@/src/lib/analytics/load";
+import type { AdherenceStatus } from "@/src/lib/coach/adherence";
+import { formatCountdown, raceDistanceLabel } from "@/src/lib/coach/race-phase";
 import { VO2_SOURCE_LABELS } from "@/src/lib/labels";
 import { useAnalysis } from "@/src/lib/use-analysis";
 import type { Recommendation } from "@/src/lib/coach/recommend";
+import type { WorkoutType } from "@/src/lib/types";
 import { colors, fonts } from "@/src/theme";
+
+const WORKOUT_SHORT: Record<WorkoutType, string> = {
+  rest: "Rest",
+  recovery: "Regen",
+  easy: "Easy",
+  long: "Long",
+  tempo: "Tempo",
+  intervals: "Int",
+  fartlek: "Fartlek",
+  speed: "Speed",
+  progression: "Prog",
+  marathon: "MP",
+  first: "Start",
+};
+
+function adherenceTone(status: AdherenceStatus): "good" | "warn" | "bad" | "neutral" {
+  if (status === "matched" || status === "rest_ok") return "good";
+  if (status === "partial") return "warn";
+  if (status === "skipped" || status === "too_hard") return "bad";
+  return "neutral";
+}
 
 function WorkoutSummary({
   rec,
@@ -48,15 +72,20 @@ function WorkoutSummary({
 }
 
 export default function TodayScreen() {
-  const { runs, profile, vo2, syncing, lastSync } = useAuth();
-  const { schedule, form, fitness } = useAnalysis(runs, profile, vo2);
+  const { runs, profile, vo2, syncing, lastSync, races } = useAuth();
+  const { schedule, form, fitness, racePhase, preparing, weekPlan, todayAdherence } = useAnalysis(
+    runs,
+    profile,
+    vo2,
+    races,
+  );
   const { today, tomorrow, ranToday } = schedule;
   const focus = ranToday ? tomorrow : today;
   const focusWhen = ranToday ? "tomorrow" : "today";
 
   if (!runs.length) {
     return (
-      <Screen>
+      <Screen testID="today-screen">
         <HeroCard>
           <Badge tone="good">Trener biegowy</Badge>
           <Title light>Witaj</Title>
@@ -65,12 +94,22 @@ export default function TodayScreen() {
             zobaczysz formę, obciążenie i trening na dziś oraz jutro.
           </Muted>
         </HeroCard>
+        <Link href="/races" asChild>
+          <Pressable style={{ marginTop: 12 }}>
+            {({ pressed }) => (
+              <Card style={{ opacity: pressed ? 0.9 : 1 }}>
+                <Subtitle>Kalendarz startów</Subtitle>
+                <Muted>Dodaj bieg, na który się zapisałeś — trener przygotuje Cię pod datę startu.</Muted>
+              </Card>
+            )}
+          </Pressable>
+        </Link>
       </Screen>
     );
   }
 
   return (
-    <Screen>
+    <Screen testID="today-screen">
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         {(syncing || lastSync) && (
           <Muted>
@@ -79,6 +118,37 @@ export default function TodayScreen() {
               : `Ostatnia sync: ${new Date(lastSync!).toLocaleString("pl-PL")}`}
           </Muted>
         )}
+
+        <Link href="/races" asChild>
+          <Pressable>
+            {({ pressed }) => (
+              <Card accent={Boolean(preparing)} delay={0} style={{ opacity: pressed ? 0.9 : 1 }}>
+                {preparing && racePhase ? (
+                  <>
+                    <Badge tone="good">Przygotowanie pod start</Badge>
+                    <Subtitle>{preparing.name}</Subtitle>
+                    <Muted>
+                      {`${raceDistanceLabel(preparing.distance)} · ${formatCountdown(racePhase.daysToRace)} · ${racePhase.phaseLabel}`}
+                    </Muted>
+                    {today.targetAssessment ? (
+                      <Muted>{`Cel czasowy: ${today.targetAssessment.label}`}</Muted>
+                    ) : null}
+                    <Muted>Dotknij, aby zarządzać startami</Muted>
+                  </>
+                ) : (
+                  <>
+                    <Subtitle>Kalendarz startów</Subtitle>
+                    <Muted>
+                      {races.length
+                        ? `Masz ${races.length} ${races.length === 1 ? "start" : "starty"} — włącz „Przygotuj mnie”, żeby trener celował w datę biegu.`
+                        : "Dodaj bieg, na który się zapisałeś. Trener zaproponuje taper i przygotowania."}
+                    </Muted>
+                  </>
+                )}
+              </Card>
+            )}
+          </Pressable>
+        </Link>
 
         <Link href={`/workout/${focusWhen}`} asChild>
           <Pressable>
@@ -106,6 +176,20 @@ export default function TodayScreen() {
             )}
           </Pressable>
         </Link>
+
+        <Card delay={40}>
+          <Subtitle>Plan vs wykonanie (dziś)</Subtitle>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <Badge tone={adherenceTone(todayAdherence.status)}>{todayAdherence.label}</Badge>
+            <Muted>{today.workout.title}</Muted>
+          </View>
+          <Muted>{todayAdherence.detail}</Muted>
+          {todayAdherence.doneDistanceM > 0 && (
+            <Muted>
+              {`Wykonane: ${(todayAdherence.doneDistanceM / 1000).toFixed(1)} km · ${formatMinutes(todayAdherence.doneDurationS)}`}
+            </Muted>
+          )}
+        </Card>
 
         {!ranToday && (
           <Link href="/workout/tomorrow" asChild>
@@ -136,6 +220,62 @@ export default function TodayScreen() {
             </Pressable>
           </Link>
         )}
+
+        <Card delay={100}>
+          <Subtitle>Plan na 7 dni</Subtitle>
+          <Muted>
+            {`~${weekPlan.plannedKm.toFixed(0)} km · ${weekPlan.trainingDays} treningów (cel: ${weekPlan.daysPerWeekTarget}/tyg.)`}
+          </Muted>
+          <View style={{ gap: 6, marginTop: 6 }}>
+            {weekPlan.days.map((d) => {
+              const weekday = d.date.toLocaleDateString("pl-PL", { weekday: "short" });
+              const dayNum = d.date.getDate();
+              return (
+                <View
+                  key={d.isoDate}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    paddingVertical: 6,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      width: 52,
+                      fontFamily: fonts.bodyBold,
+                      color: d.isToday ? colors.primary : colors.text,
+                      fontSize: 13,
+                    }}
+                  >
+                    {d.isToday ? "Dziś" : `${weekday} ${dayNum}`}
+                  </Text>
+                  <Badge tone={d.workoutType === "rest" ? "neutral" : "good"}>
+                    {WORKOUT_SHORT[d.workoutType]}
+                  </Badge>
+                  <Text
+                    style={{
+                      flex: 1,
+                      fontFamily: fonts.body,
+                      color: colors.text,
+                      fontSize: 13,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {d.title}
+                  </Text>
+                  {d.workoutType !== "rest" ? (
+                    <Muted>{`${d.plannedKm.toFixed(1)} km`}</Muted>
+                  ) : (
+                    <Muted>—</Muted>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </Card>
 
         <Card delay={120}>
           <Subtitle>Szybki podgląd</Subtitle>

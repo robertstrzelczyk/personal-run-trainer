@@ -13,9 +13,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { colors, fonts, radii, space } from "../theme";
 
-export function Screen({ children, style, ...rest }: ViewProps) {
+export function Screen({ children, style, testID, ...rest }: ViewProps) {
   return (
-    <View style={[styles.screen, style]} {...rest}>
+    <View testID={testID} style={[styles.screen, style]} {...rest}>
       <LinearGradient
         colors={["#12352a", colors.bg, colors.bg]}
         locations={[0, 0.28, 1]}
@@ -79,12 +79,14 @@ export function Muted({ children, light = false }: { children: string; light?: b
   );
 }
 
-export function Field(props: TextInputProps & { label: string }) {
-  const { label, style, ...rest } = props;
+export function Field(props: TextInputProps & { label: string; testID?: string }) {
+  const { label, style, testID, ...rest } = props;
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
+        testID={testID}
+        accessibilityLabel={label}
         placeholderTextColor={colors.muted}
         style={[styles.input, style]}
         {...rest}
@@ -98,14 +100,16 @@ export function ChipSelect<T extends string>({
   value,
   options,
   onChange,
+  testID,
 }: {
   label: string;
   value: T;
   options: Array<{ value: T; label: string }>;
   onChange: (v: T) => void;
+  testID?: string;
 }) {
   return (
-    <View style={styles.field}>
+    <View style={styles.field} testID={testID}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.chips}>
         {options.map((opt) => {
@@ -113,6 +117,8 @@ export function ChipSelect<T extends string>({
           return (
             <Pressable
               key={opt.value}
+              testID={testID ? `${testID}-${opt.value}` : undefined}
+              accessibilityLabel={opt.label}
               onPress={() => onChange(opt.value)}
               style={[styles.chip, active && styles.chipActive]}
             >
@@ -130,19 +136,23 @@ export function ToggleRow({
   detail,
   value,
   onValueChange,
+  testID,
 }: {
   label: string;
   detail?: string;
   value: boolean;
   onValueChange: (v: boolean) => void;
+  testID?: string;
 }) {
   return (
-    <View style={styles.toggleRow}>
+    <View style={styles.toggleRow} testID={testID}>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.toggleLabel}>{label}</Text>
         {detail ? <Text style={styles.muted}>{detail}</Text> : null}
       </View>
       <Switch
+        testID={testID ? `${testID}-switch` : undefined}
+        accessibilityLabel={label}
         value={value}
         onValueChange={onValueChange}
         trackColor={{ false: colors.border, true: colors.primaryDeep }}
@@ -157,14 +167,18 @@ export function Button({
   onPress,
   disabled,
   variant = "primary",
+  testID,
 }: {
   title: string;
   onPress: () => void;
   disabled?: boolean;
   variant?: "primary" | "ghost" | "danger";
+  testID?: string;
 }) {
   return (
     <Pressable
+      testID={testID}
+      accessibilityLabel={title}
       onPress={onPress}
       disabled={disabled}
       style={({ pressed }) => [
@@ -196,11 +210,31 @@ export function Loading() {
   );
 }
 
-export function Badge({ children, tone = "default" }: { children: string; tone?: "default" | "good" | "warn" }) {
+export function Badge({
+  children,
+  tone = "default",
+}: {
+  children: string;
+  tone?: "default" | "good" | "warn" | "bad" | "neutral";
+}) {
   const bg =
-    tone === "good" ? "rgba(155,225,93,0.18)" : tone === "warn" ? "rgba(253,176,34,0.18)" : "rgba(255,255,255,0.1)";
+    tone === "good"
+      ? "rgba(155,225,93,0.18)"
+      : tone === "warn"
+        ? "rgba(253,176,34,0.18)"
+        : tone === "bad"
+          ? "rgba(255,107,107,0.18)"
+          : tone === "neutral"
+            ? "rgba(255,255,255,0.08)"
+            : "rgba(255,255,255,0.1)";
   const color =
-    tone === "good" ? colors.good : tone === "warn" ? colors.warn : colors.text;
+    tone === "good"
+      ? colors.good
+      : tone === "warn"
+        ? colors.warn
+        : tone === "bad"
+          ? colors.danger
+          : colors.text;
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
       <Text style={[styles.badgeText, { color }]}>{children}</Text>

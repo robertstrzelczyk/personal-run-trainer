@@ -1,0 +1,35 @@
+appId: pl.biegowytrener.app
+tags:
+  - stats
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "today-screen"
+    timeout: 15000
+
+- tapOn: "Statystyki"
+- assertVisible:
+    id: "stats-screen"
+- assertVisible: "Tydzień"
+- assertVisible: "Miesiąc"
+- assertVisible: "Rok"
+
+- tapOn:
+    id: "stats-period-week"
+- assertVisible: "Ten tydzień"
+- assertVisible: "łącznie we wszystkich sportach"
+- assertVisible: "Bieganie"
+- assertVisible: "Chodzenie"
+- assertVisible: "Kolarstwo"
+
+- tapOn:
+    id: "stats-period-month"
+- assertVisible: "Ten miesiąc"
+- assertVisible: "Porównanie okresów"
+
+- tapOn:
+    id: "stats-period-year"
+- assertVisible: "Ten rok"
+- assertVisible: "Porównanie okresów"

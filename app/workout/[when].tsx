@@ -1,10 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, ScrollView, Text, View } from "react-native";
 import { Badge, Button, Card, Muted, Screen, Subtitle, Title } from "@/src/components/ui";
 import { useAuth } from "@/src/lib/auth-context";
 import { formatMinutes } from "@/src/lib/analytics/physiology";
 import { FORM_LABELS } from "@/src/lib/analytics/load";
 import { describeDuration, describeTarget } from "@/src/lib/coach/describe";
+import { shareWorkoutFit, shareWorkoutText } from "@/src/lib/coach/share-workout";
 import { useAnalysis } from "@/src/lib/use-analysis";
 import { colors, fonts } from "@/src/theme";
 
@@ -25,8 +27,9 @@ const WORKOUT_TYPE_PL: Record<string, string> = {
 export default function WorkoutDetailScreen() {
   const { when } = useLocalSearchParams<{ when: string }>();
   const router = useRouter();
-  const { runs, profile, vo2 } = useAuth();
-  const { schedule, form } = useAnalysis(runs, profile, vo2);
+  const { runs, profile, vo2, races } = useAuth();
+  const { schedule, form } = useAnalysis(runs, profile, vo2, races);
+  const [busy, setBusy] = useState<"text" | "fit" | null>(null);
 
   const key = when === "tomorrow" ? "tomorrow" : when === "today" ? "today" : null;
   if (!key) {
@@ -45,6 +48,28 @@ export default function WorkoutDetailScreen() {
   const workout = rec.workout;
   const dayLabel = key === "tomorrow" ? "Jutro" : "Dziś";
 
+  const onShareText = async () => {
+    try {
+      setBusy("text");
+      await shareWorkoutText(workout, `${dayLabel} · ${workout.title}`);
+    } catch (e) {
+      Alert.alert("Nie udało się udostępnić", e instanceof Error ? e.message : "Spróbuj ponownie.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onShareFit = async () => {
+    try {
+      setBusy("fit");
+      await shareWorkoutFit(workout, rec.forDate);
+    } catch (e) {
+      Alert.alert("Eksport FIT", e instanceof Error ? e.message : "Spróbuj ponownie.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
@@ -61,6 +86,7 @@ export default function WorkoutDetailScreen() {
           <Muted>{workout.summary}</Muted>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
             <Badge tone="good">{WORKOUT_TYPE_PL[workout.type] ?? workout.type}</Badge>
+            {rec.targetAssessment ? <Badge>{rec.targetAssessment.label}</Badge> : null}
             {workout.type !== "rest" && (
               <>
                 <Muted>{formatMinutes(workout.totalS)}</Muted>
@@ -148,6 +174,26 @@ export default function WorkoutDetailScreen() {
             )}
           </Card>
         )}
+
+        <Card delay={160}>
+          <Subtitle>Udostępnij</Subtitle>
+          <Muted>Tekst do notatek albo plik FIT do skopiowania na zegarek.</Muted>
+          <View style={{ gap: 8, marginTop: 4 }}>
+            <Button
+              title={busy === "text" ? "Udostępnianie…" : "Udostępnij jako tekst"}
+              onPress={onShareText}
+              disabled={busy !== null}
+            />
+            {workout.type !== "rest" && (
+              <Button
+                title={busy === "fit" ? "Eksport…" : "Eksportuj FIT na zegarek"}
+                variant="ghost"
+                onPress={onShareFit}
+                disabled={busy !== null}
+              />
+            )}
+          </View>
+        </Card>
 
         <Button title="Wróć" variant="ghost" onPress={() => router.back()} />
       </ScrollView>

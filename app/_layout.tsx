@@ -75,6 +75,28 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: colors.bg },
             }}
           />
+          <Stack.Screen
+            name="races/index"
+            options={{
+              headerShown: true,
+              title: "Starty",
+              headerStyle: { backgroundColor: colors.bgElevated },
+              headerTintColor: colors.text,
+              headerTitleStyle: { fontWeight: "700" },
+              contentStyle: { backgroundColor: colors.bg },
+            }}
+          />
+          <Stack.Screen
+            name="races/edit"
+            options={{
+              headerShown: true,
+              title: "Start",
+              headerStyle: { backgroundColor: colors.bgElevated },
+              headerTintColor: colors.text,
+              headerTitleStyle: { fontWeight: "700" },
+              contentStyle: { backgroundColor: colors.bg },
+            }}
+          />
         </Stack>
       </ReadyGate>
     </AuthProvider>

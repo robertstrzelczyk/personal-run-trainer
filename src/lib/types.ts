@@ -2,6 +2,9 @@ export type Sex = "male" | "female";
 
 export type Goal = "fitness" | "5k" | "10k" | "half" | "marathon";
 
+/** Dystans startu biegowego (bez ogólnej sprawności). */
+export type RaceDistance = Exclude<Goal, "fitness">;
+
 export interface Profile {
   age: number;
   sex: Sex;
@@ -9,6 +12,19 @@ export interface Profile {
   restHr: number;
   goal: Goal;
   daysPerWeek: number;
+}
+
+export interface RaceEvent {
+  id: string;
+  name: string;
+  /** ISO date YYYY-MM-DD (dzień startu, lokalnie) */
+  date: string;
+  distance: RaceDistance;
+  /** opcjonalny cel czasowy w sekundach */
+  targetTimeS?: number;
+  notes?: string;
+  /** gdy true — trener przygotowuje pod ten start (max jeden aktywny) */
+  prepareForIt: boolean;
 }
 
 export type RunSource = "fit" | "garmin" | "demo";

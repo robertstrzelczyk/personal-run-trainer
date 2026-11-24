@@ -1,0 +1,47 @@
+appId: pl.biegowytrener.app
+tags:
+  - settings
+  - garmin
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "today-screen"
+    timeout: 15000
+
+- tapOn: "Ustawienia"
+- assertVisible:
+    id: "settings-screen"
+- assertVisible: "Brak zapisanego klucza."
+- assertVisible:
+    id: "settings-auto-sync"
+- assertVisible: "Auto-sync przy otwarciu"
+
+# Sync bez klucza i bez tekstu w polu → alert lokalny
+- scrollUntilVisible:
+    element:
+      id: "settings-sync"
+    direction: DOWN
+- tapOn:
+    id: "settings-sync"
+- assertVisible: "Brak klucza"
+- assertVisible: ".*Personal API Key.*"
+- tapOn: "OK"
+
+# Za krótki klucz → walidacja przy zapisie (bez sieci)
+- scrollUntilVisible:
+    element:
+      id: "settings-api-key"
+    direction: UP
+- tapOn:
+    id: "settings-api-key"
+- inputText: "short"
+- hideKeyboard
+- tapOn:
+    id: "settings-save-key"
+- assertVisible: "Klucz API"
+- assertVisible: ".*Personal API Key.*"
+- tapOn: "OK"
+
+- assertVisible: "Brak zapisanego klucza."

@@ -1,7 +1,19 @@
 import { classifyRun, daysBetween, formState, loadSeries, startOfDay, type FormState } from "../analytics/load";
 import { DAY_MS, formatMinutes, median, pacesFromVdot } from "../analytics/physiology";
 import type { FitnessSummary } from "../analytics/fitness";
-import type { Goal, Profile, RunSummary, Workout } from "../types";
+import type { Goal, Profile, RaceEvent, RunSummary, Workout } from "../types";
+import {
+  activeRace,
+  formatCountdown,
+  raceDistanceLabel,
+  resolveRacePhase,
+  type RacePhaseInfo,
+} from "./race-phase";
+import {
+  assessRaceTarget,
+  reorderQualityRotation,
+  type TargetAssessment,
+} from "./target-pace";
 import {
   cruiseIntervals,
   easyRun,
@@ -27,6 +39,8 @@ export interface Recommendation {
   form: FormState;
   weeklyKm: number;
   daysSinceLast: number | undefined;
+  racePhase?: RacePhaseInfo;
+  targetAssessment?: TargetAssessment;
 }
 
 const GOAL_LONG_CAP: Record<Goal, number> = {
@@ -36,6 +50,9 @@ const GOAL_LONG_CAP: Record<Goal, number> = {
   half: 125,
   marathon: 160,
 };
+
+/** Po biegu ≥ tej długości preferujemy pełny rest zamiast recovery. */
+const BIG_RUN_REST_MIN = 90;
 
 type Quality = "tempo" | "intervals" | "fartlek" | "speed" | "progression" | "marathon" | "cruise";
 
@@ -65,6 +82,7 @@ export function recommendForDay(
   profile: Profile,
   fitness: FitnessSummary,
   day: Date,
+  races: RaceEvent[] = [],
 ): Recommendation {
   const dayStart = startOfDay(day);
   const runs = allRuns
@@ -75,11 +93,30 @@ export function recommendForDay(
   const series = loadSeries(runs, profile, yesterday);
   const form = formState(series, runs, profile, dayStart);
 
+  const selected = activeRace(races);
+  const racePhase = selected ? resolveRacePhase(selected, dayStart) : undefined;
+  const effectiveGoal: Goal =
+    racePhase && racePhase.phase !== "done" ? racePhase.effectiveGoal : profile.goal;
+  const coachingProfile: Profile = { ...profile, goal: effectiveGoal };
+  const targetAssessment =
+    selected && racePhase && racePhase.phase !== "done"
+      ? assessRaceTarget(selected, fitness.vdot)
+      : undefined;
+
   const paces = fitness.paces ?? pacesFromVdot(35);
-  const ctx: BuildContext = { profile, paces };
+  const ctx: BuildContext = { profile: coachingProfile, paces };
   const reasons: string[] = [];
   if (!fitness.paces) {
     reasons.push("Nie mam jeszcze szacunku VO2max, więc tempa są ostrożne. Po kilku biegach z pulsometrem się doprecyzują.");
+  }
+
+  if (racePhase && racePhase.phase !== "done") {
+    reasons.push(
+      `Przygotowanie pod ${racePhase.race.name} (${raceDistanceLabel(racePhase.race.distance)}): ${racePhase.phaseLabel} — ${formatCountdown(racePhase.daysToRace)}.`,
+    );
+  }
+  if (targetAssessment) {
+    reasons.push(targetAssessment.rationale);
   }
 
   const last28 = runs.filter((r) => dayStart.getTime() - new Date(r.startTime).getTime() <= 28 * DAY_MS);
@@ -108,17 +145,20 @@ export function recommendForDay(
     form,
     weeklyKm,
     daysSinceLast,
+    racePhase,
+    targetAssessment,
   });
 
+  const volumeFactor = racePhase?.volumeFactor ?? 1;
   const baseMinutes = clamp(
     roundTo5(
-      (median(
+      ((median(
         last28
           .filter((r) => !intensities.get(r.id)!.isLong && !intensities.get(r.id)!.isHard)
           .map((r) => r.durationS / 60),
-      ) ?? 30) || 30,
+      ) ?? 30) || 30) * volumeFactor,
     ),
-    25,
+    20,
     70,
   );
 
@@ -132,6 +172,23 @@ export function recommendForDay(
     reasons.push(`Ostatni bieg był ${days(daysSinceLast)} temu. Wracamy stopniowo, bez intensywności.`);
     reasons.push("Po przerwie mięśnie i ścięgna adaptują się wolniej niż układ krążenia.");
     return finish(easyRun(ctx, clamp(baseMinutes - 10, 20, 35), false));
+  }
+
+  // Dzień startu — rest / race note
+  if (racePhase?.phase === "race") {
+    reasons.push("Dziś jest dzień startu — pełny odpoczynek przed biegiem (lub sam wyścig zamiast treningu).");
+    reasons.push("Nie dokładaj obciążenia treningowego; skup się na rozgrzewce przed startem.");
+    return finish(restDay(), recoveryRun(ctx, 20));
+  }
+
+  // Regeneracja po starcie
+  if (racePhase?.phase === "recovery") {
+    reasons.push("Po starcie priorytetem jest regeneracja — ciało potrzebuje dni wolnych lub bardzo lekkiego ruchu.");
+    if (racePhase.preferRest || daysSinceLast === 0 || (daysSinceLast !== undefined && daysSinceLast <= 1)) {
+      reasons.push("Pełny dzień odpoczynku przyspiesza powrót do normalnego treningu.");
+      return finish(restDay(), recoveryRun(ctx, 25));
+    }
+    return finish(recoveryRun(ctx, clamp(baseMinutes, 20, 35)), restDay());
   }
 
   const overloaded = form.status === "overload";
@@ -151,34 +208,79 @@ export function recommendForDay(
     return finish(restDay(), recoveryRun(ctx, 25));
   }
 
+  // Taper: częstszy rest blisko startu
+  if (racePhase?.phase === "taper" && racePhase.preferRest && form.tsb < 15) {
+    reasons.push("Jesteś blisko startu — dziś pełny odpoczynek, żeby wejść w wyścig świeżo.");
+    return finish(restDay(), recoveryRun(ctx, 20));
+  }
+
   const ranYesterdayHard =
     daysSinceLast === 1 &&
     lastRun &&
     (intensities.get(lastRun.id)!.isHard || intensities.get(lastRun.id)!.isLong);
-  if (ranYesterdayHard || form.tsb < -18) {
+  const yesterdayWasBig =
+    daysSinceLast === 1 &&
+    lastRun &&
+    (lastRun.durationS >= BIG_RUN_REST_MIN * 60 ||
+      (intensities.get(lastRun.id)!.isLong && lastRun.durationS >= 75 * 60));
+
+  if (ranYesterdayHard || form.tsb < -18 || yesterdayWasBig) {
+    const preferFullRest =
+      yesterdayWasBig ||
+      racePhase?.preferRest === true ||
+      (racePhase?.phase === "taper" && ranYesterdayHard);
+
+    if (preferFullRest) {
+      reasons.push(
+        yesterdayWasBig
+          ? "Wczoraj był bardzo długi bieg — dziś pełny odpoczynek lepiej zbuduje adaptację."
+          : ranYesterdayHard
+            ? "Po mocnym treningu w taperze / blisko startu wolę dzień wolny."
+            : `Forma jest niska (${form.tsb.toFixed(0)}) — odpoczynek zamiast kolejnego biegu.`,
+      );
+      reasons.push("Jeśli bardzo chcesz ruszyć nogami, alternatywą jest krótki bieg regeneracyjny.");
+      return finish(restDay(), recoveryRun(ctx, clamp(baseMinutes - 10, 20, 35)));
+    }
+
     reasons.push(
       ranYesterdayHard
         ? "Wczoraj był mocny lub długi trening, więc dziś stawiamy na regenerację."
         : `Forma jest niska (${form.tsb.toFixed(0)}), więc dziś lekki bieg.`,
     );
     reasons.push("Bieg regeneracyjny poprawia ukrwienie mięśni, a nie dokłada zmęczenia.");
-    return finish(recoveryRun(ctx, clamp(baseMinutes - 10, 20, 40)));
+    return finish(recoveryRun(ctx, clamp(baseMinutes - 10, 20, 40)), restDay());
   }
 
   const weekday = dayStart.getDay();
   const weekend = weekday === 6 || weekday === 0;
-  const longDue = daysSinceLong >= 9 || (daysSinceLong >= 6 && weekend);
+  const longFactor = racePhase?.longFactor ?? 1;
+  const longDue =
+    longFactor > 0 &&
+    (daysSinceLong >= 9 || (daysSinceLong >= 6 && weekend)) &&
+    !(racePhase?.phase === "taper" && racePhase.daysToRace <= 5);
+
   if (longDue && weeklyKm >= 10 && (daysSinceHard >= 2 || daysSinceLast !== 1)) {
     const lastLongMin = lastLong && daysSinceLong <= 28 ? lastLong.durationS / 60 : baseMinutes * 1.5;
+    const longCap = GOAL_LONG_CAP[effectiveGoal] * Math.min(1.15, Math.max(0.35, longFactor));
     const target = roundTo5(
-      clamp(lastLongMin * 1.08, Math.max(45, baseMinutes * 1.3), GOAL_LONG_CAP[profile.goal]),
+      clamp(lastLongMin * 1.08 * longFactor, Math.max(40, baseMinutes * 1.2), longCap),
     );
-    const progressive = (profile.goal === "half" || profile.goal === "marathon") && form.tsb > -8 && target >= 70;
+    const progressive =
+      (effectiveGoal === "half" || effectiveGoal === "marathon") &&
+      form.tsb > -8 &&
+      target >= 70 &&
+      racePhase?.phase !== "taper";
     reasons.push(
       daysSinceLong >= 99
         ? "W ostatnich tygodniach nie było długiego biegu, a to on buduje wytrzymałość."
         : `Ostatni długi bieg był ${days(daysSinceLong)} temu.`,
     );
+    if (racePhase?.phase === "peak") {
+      reasons.push("Jesteśmy w fazie peak przed taperem — długi bieg jest kluczowy pod start.");
+    }
+    if (racePhase?.phase === "taper") {
+      reasons.push("W taperze długi bieg jest skrócony, żeby zejść ze zmęczenia przed startem.");
+    }
     reasons.push(`Czas wydłużamy o około 8% względem poprzedniego, do ${formatMinutes(target * 60)}.`);
     return finish(longRun(ctx, target, progressive), easyRun(ctx, baseMinutes, false));
   }
@@ -186,13 +288,22 @@ export function recommendForDay(
   const qualityReady =
     daysSinceHard >= 3 || (daysSinceHard >= 2 && form.tsb > 3) || daysSinceHard === 99;
   const acwrHigh = form.acwr !== undefined && form.acwr > 1.35;
-  if (qualityReady && form.tsb > -12 && !acwrHigh && weeklyKm >= 8) {
+  const allowQuality = racePhase?.allowQuality !== false;
+  if (allowQuality && qualityReady && form.tsb > -12 && !acwrHigh && weeklyKm >= 8) {
     const hardCount = last28.filter(
       (r) => intensities.get(r.id)!.isHard && !intensities.get(r.id)!.isLong,
     ).length;
-    const rotation = QUALITY_ROTATION[profile.goal];
+    const baseRotation = QUALITY_ROTATION[effectiveGoal];
+    const pushRacePace =
+      targetAssessment &&
+      (targetAssessment.difficulty === "ambitious" ||
+        targetAssessment.difficulty === "stretch") &&
+      (racePhase?.phase === "build" || racePhase?.phase === "peak");
+    const rotation = pushRacePace
+      ? reorderQualityRotation(baseRotation, targetAssessment.preferQualities)
+      : baseRotation;
     const quality = rotation[hardCount % rotation.length];
-    const w = Math.max(weeklyKm, 12);
+    const w = Math.max(weeklyKm, 12) * (racePhase?.phase === "taper" ? 0.75 : 1);
     const workout =
       quality === "tempo"
         ? tempoRun(ctx, w)
@@ -215,21 +326,28 @@ export function recommendForDay(
     reasons.push(
       `Forma dziś: ${form.tsb >= 0 ? "+" : ""}${form.tsb.toFixed(0)}. Wystarczająco świeży na jakość.`,
     );
-    reasons.push(`Cel: ${goalLabel(profile.goal)}. W rotacji akcentów pod ten cel przychodzi teraz kolej na ten rodzaj treningu.`);
+    reasons.push(
+      `Cel: ${goalLabel(effectiveGoal)}. W rotacji akcentów pod ten cel przychodzi teraz kolej na ten rodzaj treningu.`,
+    );
+    if (pushRacePace) {
+      reasons.push("Akcenty są ustawione bliżej tempa startowego pod Twój cel czasowy.");
+    }
     return finish(workout, easyRun(ctx, baseMinutes, false));
   }
 
   const adjusted = form.tsb > 5 ? baseMinutes + 5 : baseMinutes;
-  const stridesOk = daysSinceHard >= 2 && form.tsb > -8;
+  const stridesOk = daysSinceHard >= 2 && form.tsb > -8 && racePhase?.phase !== "taper";
   if (daysSinceHard <= 1) {
     reasons.push("Wczoraj lub dziś rano miałeś mocniejszy akcent. Dziś spokojnie.");
   } else if (acwrHigh) {
     reasons.push("Obciążenie ostatniego tygodnia jest wyższe niż zwykle, więc odpuszczamy intensywność.");
+  } else if (racePhase?.phase === "taper") {
+    reasons.push("W taperze spokojny bieg utrzymuje świeżość bez dokładania zmęczenia.");
   } else {
     reasons.push("Spokojny bieg to fundament: buduje bazę tlenową i wzmacnia kondycję bez dużego zmęczenia.");
   }
-  reasons.push(`Czas bazuje na Twoich typowych biegach (~${baseMinutes} min).`);
-  return finish(easyRun(ctx, clamp(adjusted, 25, 75), stridesOk && weeklyKm >= 12));
+  reasons.push(`Czas bazuje na Twoich typowych biegach (~${Math.round(baseMinutes)} min).`);
+  return finish(easyRun(ctx, clamp(adjusted, 20, 75), stridesOk && weeklyKm >= 12));
 }
 
 export function goalLabel(goal: Goal) {
@@ -247,15 +365,16 @@ export function recommend(
   profile: Profile,
   fitness: FitnessSummary,
   now: Date = new Date(),
+  races: RaceEvent[] = [],
 ): Recommendation {
   const ranToday = runs.some((r) => daysBetween(new Date(r.startTime), now) === 0);
   if (ranToday) {
     const tomorrow = startOfDay(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const rec = recommendForDay(runs, profile, fitness, tomorrow);
+    const rec = recommendForDay(runs, profile, fitness, tomorrow, races);
     return { ...rec, forTomorrow: true };
   }
-  return recommendForDay(runs, profile, fitness, now);
+  return recommendForDay(runs, profile, fitness, now, races);
 }
 
 export function recommendTodayAndTomorrow(
@@ -263,17 +382,18 @@ export function recommendTodayAndTomorrow(
   profile: Profile,
   fitness: FitnessSummary,
   now: Date = new Date(),
+  races: RaceEvent[] = [],
 ): { today: Recommendation; tomorrow: Recommendation; ranToday: boolean } {
   const todayStart = startOfDay(now);
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
   const ranToday = runs.some((r) => daysBetween(new Date(r.startTime), now) === 0);
   const today = {
-    ...recommendForDay(runs, profile, fitness, todayStart),
+    ...recommendForDay(runs, profile, fitness, todayStart, races),
     forTomorrow: false,
   };
   const tomorrow = {
-    ...recommendForDay(runs, profile, fitness, tomorrowStart),
+    ...recommendForDay(runs, profile, fitness, tomorrowStart, races),
     forTomorrow: true,
   };
   return { today, tomorrow, ranToday };

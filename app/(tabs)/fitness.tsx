@@ -1,4 +1,12 @@
+import { useMemo } from "react";
 import { ScrollView, Text, View } from "react-native";
+import {
+  ChartRangePicker,
+  MultiLineChart,
+  SimpleBarChart,
+  useChartRange,
+  useChartWindow,
+} from "@/src/components/charts";
 import { Card, Muted, Screen, Subtitle, Title } from "@/src/components/ui";
 import { useAuth } from "@/src/lib/auth-context";
 import { FORM_LABELS } from "@/src/lib/analytics/load";
@@ -17,13 +25,90 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export default function FitnessScreen() {
-  const { runs, profile, vo2 } = useAuth();
-  const { fitness, form, efficiency, series } = useAnalysis(runs, profile, vo2);
+  const { runs, profile, vo2, races } = useAuth();
+  const { fitness, form, efficiency, series } = useAnalysis(runs, profile, vo2, races);
+  const [range, setRange] = useChartRange(28);
+  const loadWindow = useChartWindow(series, range);
   const last7 = series.slice(-7).reduce((s, p) => s + p.load, 0);
   const last28 = series.slice(-28).reduce((s, p) => s + p.load, 0);
 
+  const loadLines = useMemo(
+    () => [
+      {
+        label: "CTL (forma)",
+        color: colors.primary,
+        data: loadWindow.map((p) => ({ value: Math.round(p.ctl * 10) / 10, date: p.date })),
+      },
+      {
+        label: "ATL (zmęczenie)",
+        color: colors.warn,
+        data: loadWindow.map((p) => ({ value: Math.round(p.atl * 10) / 10, date: p.date })),
+      },
+      {
+        label: "TSB (świeżość)",
+        color: "#5b8def",
+        data: loadWindow.map((p) => ({ value: Math.round(p.tsb * 10) / 10, date: p.date })),
+      },
+    ],
+    [loadWindow],
+  );
+
+  const loadBars = useMemo(
+    () =>
+      loadWindow.map((p) => ({
+        value: Math.round(p.load * 10) / 10,
+        label: p.date.slice(8),
+      })),
+    [loadWindow],
+  );
+
+  const vo2Window = useMemo(() => {
+    const pts = fitness.runPoints;
+    if (!pts.length) return [];
+    const end = pts[pts.length - 1].date;
+    const endDate = new Date(end);
+    endDate.setDate(endDate.getDate() - (range - 1));
+    const startKey = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
+    return pts.filter((p) => p.date >= startKey);
+  }, [fitness.runPoints, range]);
+
+  const vo2Line = useMemo(
+    () => [
+      {
+        label: "VO2 (szacunek)",
+        color: colors.primary,
+        data: vo2Window.map((p) => ({ value: Math.round(p.value * 10) / 10, date: p.date })),
+      },
+    ],
+    [vo2Window],
+  );
+
+  const effWindow = useMemo(() => {
+    const pts = efficiency.points;
+    if (!pts.length) return [];
+    const end = pts[pts.length - 1].date;
+    const endDate = new Date(end);
+    endDate.setDate(endDate.getDate() - (range - 1));
+    const startKey = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
+    return pts.filter((p) => p.date >= startKey);
+  }, [efficiency.points, range]);
+
+  const effLine = useMemo(
+    () => [
+      {
+        label: "m / uderzenie",
+        color: colors.accent,
+        data: effWindow.map((p) => ({
+          value: Math.round(p.metersPerBeat * 100) / 100,
+          date: p.date,
+        })),
+      },
+    ],
+    [effWindow],
+  );
+
   return (
-    <Screen>
+    <Screen testID="fitness-screen">
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <Card accent>
           <Title>Stan wytrenowania</Title>
@@ -43,6 +128,15 @@ export default function FitnessScreen() {
               value={form.acwr !== undefined ? form.acwr.toFixed(2) : "—"}
             />
           </View>
+        </Card>
+
+        <Card delay={40}>
+          <Subtitle>Wykresy formy</Subtitle>
+          <ChartRangePicker value={range} onChange={setRange} testID="fitness-chart-range" />
+          <Muted>CTL / ATL / TSB</Muted>
+          <MultiLineChart series={loadLines} emptyLabel="Zsynchronizuj biegi, aby zobaczyć formę." />
+          <Muted>Obciążenie dzienne (TRIMP)</Muted>
+          <SimpleBarChart data={loadBars} emptyLabel="Brak obciążenia w wybranym zakresie." />
         </Card>
 
         <Card delay={80}>
@@ -65,6 +159,8 @@ export default function FitnessScreen() {
               {`${p.label}: ${Math.floor(p.timeS / 60)}:${String(Math.round(p.timeS % 60)).padStart(2, "0")}`}
             </Muted>
           ))}
+          <Muted>Trend VO2 z biegów</Muted>
+          <MultiLineChart series={vo2Line} emptyLabel="Za mało szacunków VO2 do wykresu." />
         </Card>
 
         <Card delay={140}>
@@ -87,6 +183,8 @@ export default function FitnessScreen() {
               value={efficiency.strideM ? `${efficiency.strideM.toFixed(2)} m` : "—"}
             />
           </View>
+          <Muted>Metry na uderzenie serca</Muted>
+          <MultiLineChart series={effLine} emptyLabel="Za mało biegów aerobowych do wykresu." />
         </Card>
       </ScrollView>
     </Screen>

@@ -1,5 +1,6 @@
+import { Link } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, Text } from "react-native";
+import { Alert, Pressable, ScrollView, Text } from "react-native";
 import {
   Button,
   Card,
@@ -93,7 +94,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <Screen>
+    <Screen testID="settings-screen">
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
         <Card>
           <Title>Dane lokalne</Title>
@@ -106,6 +107,7 @@ export default function SettingsScreen() {
           <Muted>{`Biegów zapisanych: ${auth.runs.length}`}</Muted>
           {auth.syncError ? <Muted>{`Ostatni błąd sync: ${auth.syncError}`}</Muted> : null}
           <ToggleRow
+            testID="settings-auto-sync"
             label="Auto-sync przy otwarciu"
             detail={`Gdy minie ${AUTO_SYNC_HOURS} h od ostatniej synchronizacji.`}
             value={auth.autoSync}
@@ -121,6 +123,7 @@ export default function SettingsScreen() {
           </Muted>
           <Muted>{hasKey ? "Klucz jest zapisany na urządzeniu." : "Brak zapisanego klucza."}</Muted>
           <Field
+            testID="settings-api-key"
             label="Klucz Personal API"
             value={apiKey}
             onChangeText={setApiKey}
@@ -129,13 +132,21 @@ export default function SettingsScreen() {
             placeholder={hasKey ? "Wklej nowy klucz, aby wymienić" : "Wklej klucz"}
           />
           <Field
+            testID="settings-sync-days"
             label="Zakres historii (dni)"
             value={days}
             onChangeText={setDays}
             keyboardType="number-pad"
           />
-          <Button title="Zapisz klucz" variant="ghost" onPress={saveKey} disabled={busy} />
           <Button
+            testID="settings-save-key"
+            title="Zapisz klucz"
+            variant="ghost"
+            onPress={saveKey}
+            disabled={busy}
+          />
+          <Button
+            testID="settings-sync"
             title={busy && progress ? PHASE[progress.phase] : "Synchronizuj z Garmin"}
             onPress={onSync}
             disabled={busy}
@@ -145,6 +156,7 @@ export default function SettingsScreen() {
           ) : null}
           {hasKey && (
             <Button
+              testID="settings-clear-key"
               title="Usuń klucz z telefonu"
               variant="danger"
               onPress={async () => {
@@ -155,39 +167,60 @@ export default function SettingsScreen() {
           )}
         </Card>
 
+        <Link href="/races" asChild>
+          <Pressable>
+            {({ pressed }) => (
+              <Card delay={90} accent style={{ opacity: pressed ? 0.9 : 1 }}>
+                <Subtitle>Kalendarz startów</Subtitle>
+                <Muted>
+                  Zapisz biegi, na które się zapisałeś. Włącz przygotowanie — trener dopasuje taper i
+                  treningi pod datę startu.
+                </Muted>
+                <Muted>{`Zapisanych startów: ${auth.races.length}`}</Muted>
+              </Card>
+            )}
+          </Pressable>
+        </Link>
+
         <Card delay={120}>
           <Subtitle>Profil treningowy</Subtitle>
           <Field
+            testID="settings-age"
             label="Wiek"
             keyboardType="number-pad"
             value={String(profile.age)}
             onChangeText={(t) => setProfile({ ...profile, age: Number(t) || profile.age })}
           />
           <ChipSelect
+            testID="settings-sex"
             label="Płeć"
             value={profile.sex}
             options={SEX_OPTIONS}
             onChange={(sex: Sex) => setProfile({ ...profile, sex })}
           />
           <Field
+            testID="settings-max-hr"
             label="Tętno maksymalne"
             keyboardType="number-pad"
             value={String(profile.maxHr)}
             onChangeText={(t) => setProfile({ ...profile, maxHr: Number(t) || profile.maxHr })}
           />
           <Field
+            testID="settings-rest-hr"
             label="Tętno spoczynkowe"
             keyboardType="number-pad"
             value={String(profile.restHr)}
             onChangeText={(t) => setProfile({ ...profile, restHr: Number(t) || profile.restHr })}
           />
           <ChipSelect
+            testID="settings-goal"
             label="Cel"
             value={profile.goal}
             options={GOAL_OPTIONS}
             onChange={(goal: Goal) => setProfile({ ...profile, goal })}
           />
           <Field
+            testID="settings-days-per-week"
             label="Dni biegowe / tydzień"
             keyboardType="number-pad"
             value={String(profile.daysPerWeek)}
@@ -195,7 +228,7 @@ export default function SettingsScreen() {
               setProfile({ ...profile, daysPerWeek: Number(t) || profile.daysPerWeek })
             }
           />
-          <Button title="Zapisz profil" onPress={onSaveProfile} />
+          <Button testID="settings-save-profile" title="Zapisz profil" onPress={onSaveProfile} />
         </Card>
 
         <Card delay={180}>

@@ -1,0 +1,21 @@
+name: e2e-test-android
+
+jobs:
+  build_android_for_e2e:
+    type: build
+    params:
+      platform: android
+      profile: e2e-test
+
+  maestro_test:
+    needs: [build_android_for_e2e]
+    type: maestro
+    params:
+      build_id: ${{ needs.build_android_for_e2e.outputs.build_id }}
+      flow_path:
+        - .maestro/launch.yaml
+        - .maestro/tabs-navigation.yaml
+        - .maestro/fitness-empty.yaml
+        - .maestro/stats-periods.yaml
+        - .maestro/settings-garmin.yaml
+        - .maestro/settings-profile.yaml

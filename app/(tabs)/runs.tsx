@@ -10,7 +10,7 @@ export default function RunsScreen() {
   const { runs } = useAuth();
 
   return (
-    <Screen>
+    <Screen testID="runs-screen">
       <Title>Aktywności</Title>
       <Muted>
         {runs.length

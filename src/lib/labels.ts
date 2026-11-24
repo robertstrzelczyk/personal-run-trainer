@@ -1,4 +1,4 @@
-import type { Goal, Sex } from "./types";
+import type { Goal, RaceDistance, Sex } from "./types";
 
 export const VO2_SOURCE_LABELS = {
   garmin: "Garmin",
@@ -19,10 +19,21 @@ export const GOAL_OPTIONS: Array<{ value: Goal; label: string }> = [
   { value: "marathon", label: "Maraton" },
 ];
 
+export const RACE_DISTANCE_OPTIONS: Array<{ value: RaceDistance; label: string }> = [
+  { value: "5k", label: "5 km" },
+  { value: "10k", label: "10 km" },
+  { value: "half", label: "Półmaraton" },
+  { value: "marathon", label: "Maraton" },
+];
+
 export function sexLabel(sex: Sex) {
   return SEX_OPTIONS.find((o) => o.value === sex)?.label ?? sex;
 }
 
 export function goalLabelPl(goal: Goal) {
   return GOAL_OPTIONS.find((o) => o.value === goal)?.label ?? goal;
+}
+
+export function raceDistanceLabelPl(d: RaceDistance) {
+  return RACE_DISTANCE_OPTIONS.find((o) => o.value === d)?.label ?? d;
 }

@@ -1,0 +1,79 @@
+appId: pl.biegowytrener.app
+tags:
+  - settings
+  - profile
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "today-screen"
+    timeout: 15000
+
+- tapOn: "Ustawienia"
+- assertVisible:
+    id: "settings-screen"
+
+- scrollUntilVisible:
+    element:
+      id: "settings-age"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    id: "settings-age"
+- eraseText
+- inputText: "32"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      id: "settings-max-hr"
+    direction: DOWN
+- tapOn:
+    id: "settings-max-hr"
+- eraseText
+- inputText: "188"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      id: "settings-rest-hr"
+    direction: DOWN
+- tapOn:
+    id: "settings-rest-hr"
+- eraseText
+- inputText: "52"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      id: "settings-goal-half"
+    direction: DOWN
+- tapOn:
+    id: "settings-goal-half"
+
+- scrollUntilVisible:
+    element:
+      id: "settings-days-per-week"
+    direction: DOWN
+- tapOn:
+    id: "settings-days-per-week"
+- eraseText
+- inputText: "5"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      id: "settings-save-profile"
+    direction: DOWN
+- tapOn:
+    id: "settings-save-profile"
+
+# Alert: „Zapisano”
+- assertVisible: "Zapisano"
+- tapOn: "OK"
+
+- assertVisible:
+    id: "settings-age"
+- assertVisible: "32"

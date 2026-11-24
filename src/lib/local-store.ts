@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { Profile, RunSummary } from "./types";
+import type { Profile, RaceEvent, RunSummary } from "./types";
 
 const KEYS = {
   profile: "app.profile",
@@ -7,6 +7,7 @@ const KEYS = {
   vo2: "app.vo2",
   lastSync: "app.lastSync",
   autoSync: "app.autoSync",
+  races: "app.races",
 } as const;
 
 async function readJson<T>(key: string): Promise<T | null> {
@@ -25,13 +26,15 @@ export async function loadLocalState(): Promise<{
   vo2: Array<{ date: string; value: number }>;
   lastSync: string | null;
   autoSync: boolean;
+  races: RaceEvent[];
 }> {
-  const [profile, runs, vo2, lastSync, autoSyncRaw] = await Promise.all([
+  const [profile, runs, vo2, lastSync, autoSyncRaw, races] = await Promise.all([
     readJson<Profile>(KEYS.profile),
     readJson<RunSummary[]>(KEYS.runs),
     readJson<Array<{ date: string; value: number }>>(KEYS.vo2),
     AsyncStorage.getItem(KEYS.lastSync),
     AsyncStorage.getItem(KEYS.autoSync),
+    readJson<RaceEvent[]>(KEYS.races),
   ]);
   return {
     profile,
@@ -39,6 +42,7 @@ export async function loadLocalState(): Promise<{
     vo2: vo2 ?? [],
     lastSync,
     autoSync: autoSyncRaw !== "0",
+    races: races ?? [],
   };
 }
 
@@ -60,4 +64,8 @@ export async function saveLocalLastSync(iso: string) {
 
 export async function saveLocalAutoSync(enabled: boolean) {
   await AsyncStorage.setItem(KEYS.autoSync, enabled ? "1" : "0");
+}
+
+export async function saveLocalRaces(races: RaceEvent[]) {
+  await AsyncStorage.setItem(KEYS.races, JSON.stringify(races));
 }

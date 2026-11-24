@@ -98,3 +98,45 @@ export function formatKm(distanceM: number): string {
   if (distanceM < 100) return "0 km";
   return `${(distanceM / 1000).toFixed(distanceM >= 10_000 ? 1 : 2)} km`;
 }
+
+export interface DailyDistancePoint {
+  date: string;
+  distanceKm: number;
+  runningKm: number;
+  walkingKm: number;
+  cyclingKm: number;
+}
+
+/** Dzienne sumy dystansu (km) wstecz od `now` — do wykresów. */
+export function dailyDistanceSeries(
+  runs: RunSummary[],
+  days: number,
+  now: Date = new Date(),
+): DailyDistancePoint[] {
+  const end = startOfDay(now);
+  const byDay = new Map<string, DailyDistancePoint>();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end.getTime() - i * DAY_MS);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    byDay.set(key, {
+      date: key,
+      distanceKm: 0,
+      runningKm: 0,
+      walkingKm: 0,
+      cyclingKm: 0,
+    });
+  }
+  for (const run of runs) {
+    const t = startOfDay(run.startTime);
+    const key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    const bucket = byDay.get(key);
+    if (!bucket) continue;
+    const km = run.distanceM / 1000;
+    bucket.distanceKm += km;
+    const sport = activitySport(run);
+    if (sport === "running") bucket.runningKm += km;
+    else if (sport === "walking") bucket.walkingKm += km;
+    else bucket.cyclingKm += km;
+  }
+  return [...byDay.values()];
+}

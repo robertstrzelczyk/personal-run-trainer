@@ -1,0 +1,13 @@
+# Wspólna konfiguracja Maestro.
+# Uruchomienie: npm run test:e2e
+# Wymaga APK/.app zainstalowanego na emulatorze lub urządzeniu.
+
+appId: pl.biegowytrener.app
+
+flows:
+  - launch.yaml
+  - tabs-navigation.yaml
+  - fitness-empty.yaml
+  - stats-periods.yaml
+  - settings-garmin.yaml
+  - settings-profile.yaml

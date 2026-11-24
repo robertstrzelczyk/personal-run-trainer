@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { SimpleBarChart } from "@/src/components/charts";
 import { Card, Muted, Screen, Subtitle, Title } from "@/src/components/ui";
 import { useAuth } from "@/src/lib/auth-context";
 import {
   allPeriodStats,
+  dailyDistanceSeries,
   formatKm,
   type StatsPeriod,
 } from "@/src/lib/analytics/sport-stats";
@@ -15,6 +17,18 @@ const PERIODS: Array<{ id: StatsPeriod; label: string }> = [
   { id: "year", label: "Rok" },
 ];
 
+const PERIOD_DAYS: Record<StatsPeriod, number> = {
+  week: 7,
+  month: 30,
+  year: 90,
+};
+
+const SPORT_COLORS = {
+  running: colors.primary,
+  walking: colors.accent,
+  cycling: "#5b8def",
+} as const;
+
 export default function StatsScreen() {
   const { runs } = useAuth();
   const [period, setPeriod] = useState<StatsPeriod>("week");
@@ -22,8 +36,33 @@ export default function StatsScreen() {
   const current = stats.find((s) => s.period === period)!;
   const maxDist = Math.max(...current.sports.map((s) => s.distanceM), 1);
 
+  const daily = useMemo(
+    () => dailyDistanceSeries(runs, PERIOD_DAYS[period]),
+    [runs, period],
+  );
+
+  const distanceBars = useMemo(
+    () =>
+      daily.map((d) => ({
+        value: Math.round(d.distanceKm * 100) / 100,
+        label: d.date.slice(8),
+        frontColor: colors.primary,
+      })),
+    [daily],
+  );
+
+  const sportBars = useMemo(
+    () =>
+      current.sports.map((s) => ({
+        value: Math.round((s.distanceM / 1000) * 100) / 100,
+        label: s.label.slice(0, 5),
+        frontColor: SPORT_COLORS[s.sport],
+      })),
+    [current.sports],
+  );
+
   return (
-    <Screen>
+    <Screen testID="stats-screen">
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <Card accent>
           <Title>Statystyki</Title>
@@ -39,6 +78,8 @@ export default function StatsScreen() {
             return (
               <Pressable
                 key={p.id}
+                testID={`stats-period-${p.id}`}
+                accessibilityLabel={p.label}
                 onPress={() => setPeriod(p.id)}
                 style={{
                   flex: 1,
@@ -75,8 +116,29 @@ export default function StatsScreen() {
           <Muted>łącznie we wszystkich sportach</Muted>
         </Card>
 
+        <Card delay={40}>
+          <Subtitle>Dystans w czasie</Subtitle>
+          <Muted>
+            {period === "year"
+              ? "Ostatnie 90 dni (dziennie)"
+              : period === "month"
+                ? "Ostatnie 30 dni"
+                : "Ostatnie 7 dni"}
+          </Muted>
+          <SimpleBarChart
+            data={distanceBars}
+            formatY={(v) => `${v}`}
+            emptyLabel="Brak aktywności w tym okresie."
+          />
+        </Card>
+
+        <Card delay={60}>
+          <Subtitle>Podział sportów</Subtitle>
+          <SimpleBarChart data={sportBars} emptyLabel="Brak danych sportowych." />
+        </Card>
+
         {current.sports.map((sport, i) => (
-          <Card key={sport.sport} delay={60 + i * 40}>
+          <Card key={sport.sport} delay={80 + i * 40}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
               <Subtitle>{sport.label}</Subtitle>
               <Text style={{ fontFamily: fonts.display, fontSize: 26, color: colors.text }}>
@@ -97,12 +159,7 @@ export default function StatsScreen() {
                 style={{
                   width: `${Math.max(sport.distanceM > 0 ? 4 : 0, (sport.distanceM / maxDist) * 100)}%`,
                   height: "100%",
-                  backgroundColor:
-                    sport.sport === "running"
-                      ? colors.primary
-                      : sport.sport === "walking"
-                        ? colors.accent
-                        : "#5b8def",
+                  backgroundColor: SPORT_COLORS[sport.sport],
                   borderRadius: 999,
                 }}
               />

@@ -2,7 +2,8 @@
   "expo": {
     "name": "Trener biegowy",
     "slug": "personal-run-trainer",
-    "version": "1.0.0",
+    "version": "1.1.0",
+    "description": "Lokalny trener biegowy pod Garmin: sync FIT, forma CTL/ATL/TSB, plan 7 dni, cel czasowy startu, plan vs wykonanie oraz eksport treningu (tekst/FIT) na zegarek.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "personalruntrainer",
@@ -36,7 +37,8 @@
           "backgroundColor": "#0c1512"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true

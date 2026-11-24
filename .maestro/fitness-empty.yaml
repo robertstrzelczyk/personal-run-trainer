@@ -1,0 +1,21 @@
+appId: pl.biegowytrener.app
+tags:
+  - fitness
+  - empty-state
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "today-screen"
+    timeout: 15000
+
+- tapOn: "Forma"
+- assertVisible:
+    id: "fitness-screen"
+- assertVisible: "Stan wytrenowania"
+- assertVisible: "Status"
+- assertVisible: "Forma (CTL)"
+- assertVisible: "VO2max"
+- assertVisible: "VDOT"
+- assertVisible: "Efektywność biegu"

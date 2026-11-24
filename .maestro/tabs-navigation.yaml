@@ -1,0 +1,40 @@
+appId: pl.biegowytrener.app
+tags:
+  - smoke
+  - navigation
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "today-screen"
+    timeout: 15000
+
+- tapOn: "Forma"
+- assertVisible:
+    id: "fitness-screen"
+- assertVisible: "Stan wytrenowania"
+- assertVisible: "Stopień wytrenowania.*"
+
+- tapOn: "Biegi"
+- assertVisible:
+    id: "runs-screen"
+- assertVisible: "Aktywności"
+- assertVisible: "Brak aktywności.*"
+
+- tapOn: "Statystyki"
+- assertVisible:
+    id: "stats-screen"
+- assertVisible: "Statystyki"
+- assertVisible: "łącznie we wszystkich sportach"
+
+- tapOn: "Ustawienia"
+- assertVisible:
+    id: "settings-screen"
+- assertVisible: "Dane lokalne"
+- assertVisible: "Garmin Connect"
+
+- tapOn: "Dziś"
+- assertVisible:
+    id: "today-screen"
+- assertVisible: "Witaj"

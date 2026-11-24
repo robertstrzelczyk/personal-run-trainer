@@ -9,12 +9,13 @@ import {
   type ReactNode,
 } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import type { Profile, RunSummary } from "./types";
+import type { Profile, RaceEvent, RunSummary } from "./types";
 import {
   loadLocalState,
   saveLocalAutoSync,
   saveLocalLastSync,
   saveLocalProfile,
+  saveLocalRaces,
   saveLocalRuns,
   saveLocalVo2,
 } from "./local-store";
@@ -43,6 +44,7 @@ interface AppStateValue {
   profile: Profile;
   runs: RunSummary[];
   vo2: Array<{ date: string; value: number }>;
+  races: RaceEvent[];
   lastSync: string | null;
   autoSync: boolean;
   syncing: boolean;
@@ -52,8 +54,10 @@ interface AppStateValue {
   setProfileLocal: (p: Profile) => void;
   setRunsLocal: (runs: RunSummary[]) => void;
   setVo2Local: (vo2: Array<{ date: string; value: number }>) => void;
+  setRacesLocal: (races: RaceEvent[]) => void;
   setLastSyncLocal: (iso: string | null) => void;
   setAutoSync: (enabled: boolean) => Promise<void>;
+  saveRaces: (races: RaceEvent[]) => Promise<void>;
   runSync: (options?: {
     days?: number;
     apiKey?: string;
@@ -72,20 +76,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [vo2, setVo2] = useState<Array<{ date: string; value: number }>>([]);
+  const [races, setRaces] = useState<RaceEvent[]>([]);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [autoSync, setAutoSyncState] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const syncingRef = useRef(false);
-  const stateRef = useRef({ profile, runs, vo2, lastSync, autoSync });
-  stateRef.current = { profile, runs, vo2, lastSync, autoSync };
+  const stateRef = useRef({ profile, runs, vo2, races, lastSync, autoSync });
+  stateRef.current = { profile, runs, vo2, races, lastSync, autoSync };
 
   const refreshData = useCallback(async () => {
     const local = await loadLocalState();
     setProfile(local.profile ?? DEFAULT_PROFILE);
     setRuns(local.runs);
     setVo2(local.vo2);
+    setRaces(local.races);
     setLastSync(local.lastSync);
     setAutoSyncState(local.autoSync);
   }, []);
@@ -111,6 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void saveLocalVo2(next);
   }, []);
 
+  const setRacesLocal = useCallback((next: RaceEvent[]) => {
+    setRaces(next);
+    void saveLocalRaces(next);
+  }, []);
+
   const setLastSyncLocal = useCallback((iso: string | null) => {
     setLastSync(iso);
     if (iso) void saveLocalLastSync(iso);
@@ -124,6 +135,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const saveProfile = useCallback(async (p: Profile) => {
     setProfile(p);
     await saveLocalProfile(p);
+  }, []);
+
+  const saveRaces = useCallback(async (next: RaceEvent[]) => {
+    setRaces(next);
+    await saveLocalRaces(next);
   }, []);
 
   const runSync = useCallback(
@@ -207,6 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       runs,
       vo2,
+      races,
       lastSync,
       autoSync,
       syncing,
@@ -216,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileLocal: setProfile,
       setRunsLocal,
       setVo2Local,
+      setRacesLocal,
       setLastSyncLocal,
       setAutoSync,
       runSync,
@@ -227,12 +245,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signOut: async () => {},
       saveProfile,
+      saveRaces,
     }),
     [
       ready,
       profile,
       runs,
       vo2,
+      races,
       lastSync,
       autoSync,
       syncing,
@@ -241,10 +261,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshData,
       setRunsLocal,
       setVo2Local,
+      setRacesLocal,
       setLastSyncLocal,
       setAutoSync,
       runSync,
       saveProfile,
+      saveRaces,
     ],
   );
 

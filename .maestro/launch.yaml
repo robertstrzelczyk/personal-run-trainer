@@ -1,0 +1,14 @@
+appId: pl.biegowytrener.app
+tags:
+  - smoke
+  - launch
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "today-screen"
+    timeout: 15000
+- assertVisible: "Witaj"
+- assertVisible: "Trener biegowy"
+- assertVisible: ".*Garmin Connect.*"
