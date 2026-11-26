@@ -80,6 +80,7 @@ export type WorkoutType =
   | "easy"
   | "long"
   | "tempo"
+  | "cruise"
   | "intervals"
   | "fartlek"
   | "speed"

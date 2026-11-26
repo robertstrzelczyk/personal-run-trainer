@@ -16,6 +16,7 @@ export interface AdherenceResult {
 
 const QUALITY: WorkoutType[] = [
   "tempo",
+  "cruise",
   "intervals",
   "fartlek",
   "speed",

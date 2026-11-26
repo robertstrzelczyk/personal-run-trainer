@@ -13,7 +13,10 @@ import type { Profile, RaceEvent, RunFeedback, RunSummary } from "./types";
 import {
   applyLocalBackup,
   buildLocalBackup,
+  clearLocalLastSync,
+  loadIgnoredActivityIds,
   loadLocalState,
+  saveIgnoredActivityIds,
   saveLocalAutoSync,
   saveLocalFeedback,
   saveLocalLastSync,
@@ -140,6 +143,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshData]);
 
+  const setProfileLocal = useCallback((p: Profile) => {
+    setProfile(p);
+    void saveLocalProfile(p);
+  }, []);
+
   const setRunsLocal = useCallback((next: RunSummary[]) => {
     setRuns(next);
     void saveLocalRuns(next);
@@ -158,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setLastSyncLocal = useCallback((iso: string | null) => {
     setLastSync(iso);
     if (iso) void saveLocalLastSync(iso);
+    else void clearLocalLastSync();
   }, []);
 
   const setAutoSync = useCallback(async (enabled: boolean) => {
@@ -209,17 +218,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSyncError(null);
       setSyncProgress({ phase: "token" });
       try {
-        const current = stateRef.current;
+        const ignoredIds = await loadIgnoredActivityIds();
+        const snapshot = stateRef.current;
         const result = await runGarminSync({
           apiKey: key,
           days: options?.days ?? 90,
-          known: current.runs.map((r) => ({ id: r.id, startTime: r.startTime })),
+          known: snapshot.runs.map((r) => ({ id: r.id, startTime: r.startTime })),
+          ignoredIds,
           onProgress: setSyncProgress,
         });
+        // Po długim syncu bierz najnowszy stan (edycje profilu w trakcie)
+        const latest = stateRef.current;
         const merged = mergeSyncIntoState(result, {
-          profile: current.profile,
-          runs: current.runs,
-          vo2: current.vo2,
+          profile: latest.profile,
+          runs: latest.runs,
+          vo2: latest.vo2,
+          lastSync: latest.lastSync,
         });
         const geo = centroidFromRuns(merged.runs);
         const profileWithGeo =
@@ -230,11 +244,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRuns(merged.runs);
         setVo2(merged.vo2);
         setLastSync(merged.lastSync);
+        if (merged.ignoredIds.length) {
+          await saveIgnoredActivityIds([...ignoredIds, ...merged.ignoredIds]);
+        }
         await Promise.all([
           saveLocalProfile(profileWithGeo),
           saveLocalRuns(merged.runs),
           saveLocalVo2(merged.vo2),
-          saveLocalLastSync(merged.lastSync),
+          merged.lastSync
+            ? saveLocalLastSync(merged.lastSync)
+            : Promise.resolve(),
         ]);
         return result;
       } catch (e) {
@@ -275,7 +294,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStateValue>(
     () => ({
       ready,
-      configured: true,
+      configured: false,
       session: null,
       user: null,
       profile,
@@ -290,7 +309,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       syncProgress,
       syncError,
       refreshData,
-      setProfileLocal: setProfile,
+      setProfileLocal,
       setRunsLocal,
       setVo2Local,
       setRacesLocal,
@@ -325,6 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       syncProgress,
       syncError,
       refreshData,
+      setProfileLocal,
       setRunsLocal,
       setVo2Local,
       setRacesLocal,

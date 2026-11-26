@@ -26,7 +26,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export default function FitnessScreen() {
   const { runs, profile, vo2, races, feedback } = useAuth();
-  const { fitness, form, efficiency, series } = useAnalysis(runs, profile, vo2, races, feedback);
+  const { fitness, form, efficiency, series } = useAnalysis(runs, profile, vo2, races, feedback, {
+    week: false,
+  });
   const [range, setRange] = useChartRange(28);
   const loadWindow = useChartWindow(series, range);
   const last7 = series.slice(-7).reduce((s, p) => s + p.load, 0);
@@ -46,7 +48,7 @@ export default function FitnessScreen() {
       },
       {
         label: "TSB (świeżość)",
-        color: "#5b8def",
+        color: colors.chartBlue,
         data: loadWindow.map((p) => ({ value: Math.round(p.tsb * 10) / 10, date: p.date })),
       },
     ],

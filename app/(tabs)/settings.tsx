@@ -166,18 +166,26 @@ export default function SettingsScreen() {
   }
 
   async function enableDeload(daysN: number) {
-    const until = deloadUntilFromToday(daysN);
-    const next = { ...profile, deloadUntil: until };
-    setProfile(next);
-    await auth.saveProfile(next);
-    Alert.alert("Deload", `Tryb deload do ${until}.`);
+    try {
+      const until = deloadUntilFromToday(daysN);
+      const next = { ...profile, deloadUntil: until };
+      setProfile(next);
+      await auth.saveProfile(next);
+      Alert.alert("Deload", `Tryb deload do ${until}.`);
+    } catch (e) {
+      Alert.alert("Błąd", e instanceof Error ? e.message : "Nie udało się włączyć deload.");
+    }
   }
 
   async function clearDeload() {
-    const next = { ...profile, deloadUntil: undefined };
-    setProfile(next);
-    await auth.saveProfile(next);
-    Alert.alert("Deload", "Tryb deload wyłączony.");
+    try {
+      const next = { ...profile, deloadUntil: undefined };
+      setProfile(next);
+      await auth.saveProfile(next);
+      Alert.alert("Deload", "Tryb deload wyłączony.");
+    } catch (e) {
+      Alert.alert("Błąd", e instanceof Error ? e.message : "Nie udało się wyłączyć deload.");
+    }
   }
 
   return (

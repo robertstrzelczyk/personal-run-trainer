@@ -7,14 +7,15 @@ import { useAnalysis } from "@/src/lib/use-analysis";
 import { colors, fonts } from "@/src/theme";
 
 const SHORT: Record<string, string> = {
-  rest: "Rest",
+  rest: "Odp",
   recovery: "Regen",
-  easy: "Easy",
-  long: "Long",
+  easy: "Spok",
+  long: "Długi",
   tempo: "Tempo",
+  cruise: "Cruise",
   intervals: "Int",
   fartlek: "Fartlek",
-  speed: "Speed",
+  speed: "Szyb",
   progression: "Prog",
   marathon: "MP",
   first: "Start",
@@ -23,7 +24,10 @@ const SHORT: Record<string, string> = {
 export default function BlockPlanScreen() {
   const router = useRouter();
   const { runs, profile, vo2, races, feedback } = useAuth();
-  const { blockPlan } = useAnalysis(runs, profile, vo2, races, feedback);
+  const { blockPlan } = useAnalysis(runs, profile, vo2, races, feedback, {
+    week: false,
+    block: true,
+  });
 
   if (!blockPlan) {
     return (

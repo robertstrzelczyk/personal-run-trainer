@@ -1,5 +1,5 @@
 import { Link, Stack, useRouter } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import {
   Badge,
   Button,
@@ -126,8 +126,22 @@ export default function RacesScreen() {
     await saveRaces(next);
   }
 
-  async function removeRace(id: string) {
-    await saveRaces(races.filter((r) => r.id !== id));
+  function removeRace(id: string) {
+    const race = races.find((r) => r.id === id);
+    Alert.alert(
+      "Usunąć start?",
+      race ? `„${race.name}” zniknie z kalendarza.` : "Tej pozycji nie da się cofnąć.",
+      [
+        { text: "Anuluj", style: "cancel" },
+        {
+          text: "Usuń",
+          style: "destructive",
+          onPress: () => {
+            void saveRaces(races.filter((r) => r.id !== id));
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -138,7 +152,7 @@ export default function RacesScreen() {
           title: "Starty",
           headerStyle: { backgroundColor: colors.bgElevated },
           headerTintColor: colors.text,
-          headerTitleStyle: { fontWeight: "700" },
+          headerTitleStyle: { fontFamily: fonts.display, fontSize: 22 },
         }}
       />
       <Screen testID="races-screen">

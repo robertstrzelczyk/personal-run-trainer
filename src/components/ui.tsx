@@ -31,13 +31,20 @@ export function Card({
   style,
   accent = false,
   delay = 0,
+  animated = true,
   ...rest
-}: ViewProps & { accent?: boolean; delay?: number }) {
+}: ViewProps & { accent?: boolean; delay?: number; animated?: boolean }) {
+  const body = (
+    <View style={[styles.card, accent && styles.cardAccent]} {...rest}>
+      {children}
+    </View>
+  );
+  if (!animated) {
+    return <View style={style}>{body}</View>;
+  }
   return (
     <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} style={style}>
-      <View style={[styles.card, accent && styles.cardAccent]} {...rest}>
-        {children}
-      </View>
+      {body}
     </Animated.View>
   );
 }

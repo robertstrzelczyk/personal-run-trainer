@@ -6,9 +6,21 @@ export function dayKey(date: Date | string | number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Lokalna data YYYY-MM-DD (alias dayKey). */
+export function toIsoLocal(date: Date | string | number) {
+  return dayKey(date);
+}
+
 export function startOfDay(date: Date | string | number) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Dodaj dni kalendarzowe lokalnie (bezpieczne przy zmianie czasu). */
+export function addLocalDays(date: Date | string | number, days: number) {
+  const d = startOfDay(date);
+  d.setDate(d.getDate() + days);
   return d;
 }
 
@@ -160,9 +172,3 @@ export function formState(series: LoadPoint[], runs: RunSummary[], p: Profile, n
   return { status, ctl, atl, tsb, ctlChange4w, acwr };
 }
 
-export function median(values: number[]) {
-  if (!values.length) return 0;
-  const s = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}

@@ -17,6 +17,10 @@ export interface SyncResult {
   alreadyKnown: number;
   failed: number;
   warnings: string[];
+  /** true gdy 429 / pominięte dni listy / błędy pobierania */
+  incomplete?: boolean;
+  /** id aktywności pominiętych (np. nie-bieg) — nie pobieraj ponownie */
+  ignoredIds?: string[];
 }
 
 class ApiError extends Error {
@@ -46,37 +50,45 @@ export async function syncGarmin(options: {
   apiKey: string;
   days: number;
   known: KnownRun[];
+  ignoredIds?: string[];
   onProgress: (p: SyncProgress) => void;
 }): Promise<SyncResult> {
   const { apiKey, days, known, onProgress } = options;
+  const ignored = new Set(options.ignoredIds ?? []);
 
   onProgress({ phase: "token" });
   const token = await direct(() => obtainToken(apiKey.trim()));
 
   onProgress({ phase: "list" });
-  const activities = await direct(() => activitiesForDays(token, days));
+  const listed = await direct(() => activitiesForDays(token, days));
+  const activities = listed.items;
+  const warnings: string[] = [...listed.warnings];
+  let incomplete = listed.warnings.length > 0;
 
   const knownTimes = known.map((k) => new Date(k.startTime).getTime());
   const knownIds = new Set(known.map((k) => k.id));
   const pending = activities.filter((a) => {
-    if (knownIds.has(`garmin-${a.id}`)) return false;
+    const gid = `garmin-${a.id}`;
+    if (knownIds.has(gid) || ignored.has(gid) || ignored.has(a.id)) return false;
     const t = new Date(a.startTime).getTime();
     return !knownTimes.some((kt) => Math.abs(kt - t) < 90_000);
   });
 
   const runs: RunSummary[] = [];
+  const newIgnored: string[] = [];
   let failed = 0;
   let done = 0;
-  const warnings: string[] = [];
   onProgress({ phase: "download", done, total: pending.length });
 
-  // Jedna aktywność naraz + krótka pauza — unikamy 429 przy dużym syncu.
   let fatal: ApiError | undefined;
   for (const activity of pending) {
     if (fatal) break;
     try {
       const result = await direct(() => activityFromListItem(token, activity));
       if (result.run) runs.push(result.run);
+      else if (result.skipped) {
+        newIgnored.push(`garmin-${activity.id}`);
+      }
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         fatal = error;
@@ -86,9 +98,11 @@ export async function syncGarmin(options: {
         warnings.push(
           "Garmin ograniczył zapytania w trakcie pobierania. Zapisuję to, co już jest — dokończ sync później (paczka / większy zakres).",
         );
+        incomplete = true;
         break;
       }
       failed++;
+      incomplete = true;
     } finally {
       done++;
       onProgress({ phase: "download", done, total: pending.length });
@@ -119,6 +133,8 @@ export async function syncGarmin(options: {
     alreadyKnown: activities.length - pending.length,
     failed,
     warnings,
+    incomplete: incomplete || failed > 0,
+    ignoredIds: newIgnored,
   };
 }
 

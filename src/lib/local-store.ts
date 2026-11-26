@@ -10,7 +10,11 @@ const KEYS = {
   races: "app.races",
   feedback: "app.runFeedback",
   onboardingDone: "app.onboardingDone",
+  ignoredActivities: "app.ignoredActivities",
 } as const;
+
+/** Pełne track/hrHist tylko dla ostatnich N dni — starsze bez GPS/hist (limit AsyncStorage). */
+const DETAIL_RETENTION_DAYS = 90;
 
 export const BACKUP_VERSION = 1;
 
@@ -24,6 +28,7 @@ export interface LocalBackup {
   feedback: Record<string, RunFeedback>;
   lastSync: string | null;
   autoSync: boolean;
+  onboardingDone?: boolean;
 }
 
 async function readJson<T>(key: string): Promise<T | null> {
@@ -73,8 +78,38 @@ export async function saveLocalProfile(profile: Profile) {
   await AsyncStorage.setItem(KEYS.profile, JSON.stringify(profile));
 }
 
+function stripHeavyFields(runs: RunSummary[]): RunSummary[] {
+  const cutoff = Date.now() - DETAIL_RETENTION_DAYS * 86_400_000;
+  return runs.map((r) => {
+    if (new Date(r.startTime).getTime() >= cutoff) return r;
+    if (!r.track && !r.hrHist) return r;
+    const { track: _t, hrHist: _h, ...rest } = r;
+    return rest;
+  });
+}
+
 export async function saveLocalRuns(runs: RunSummary[]) {
-  await AsyncStorage.setItem(KEYS.runs, JSON.stringify(runs));
+  const payload = stripHeavyFields(runs);
+  try {
+    await AsyncStorage.setItem(KEYS.runs, JSON.stringify(payload));
+  } catch {
+    // Awaryjnie: bez track/hrHist w ogóle
+    const bare = runs.map(({ track: _t, hrHist: _h, ...rest }) => rest);
+    await AsyncStorage.setItem(KEYS.runs, JSON.stringify(bare));
+  }
+}
+
+export async function loadIgnoredActivityIds(): Promise<string[]> {
+  return (await readJson<string[]>(KEYS.ignoredActivities)) ?? [];
+}
+
+export async function saveIgnoredActivityIds(ids: string[]) {
+  const unique = [...new Set(ids)].slice(0, 5000);
+  await AsyncStorage.setItem(KEYS.ignoredActivities, JSON.stringify(unique));
+}
+
+export async function clearLocalLastSync() {
+  await AsyncStorage.removeItem(KEYS.lastSync);
 }
 
 export async function saveLocalVo2(vo2: Array<{ date: string; value: number }>) {
@@ -120,6 +155,7 @@ export async function buildLocalBackup(): Promise<LocalBackup> {
     feedback: state.feedback,
     lastSync: state.lastSync,
     autoSync: state.autoSync,
+    onboardingDone: state.onboardingDone,
   };
 }
 
@@ -135,6 +171,7 @@ export async function applyLocalBackup(backup: LocalBackup): Promise<void> {
     saveLocalRaces(backup.races ?? []),
     saveLocalFeedback(backup.feedback ?? {}),
     saveLocalAutoSync(backup.autoSync !== false),
-    backup.lastSync ? saveLocalLastSync(backup.lastSync) : AsyncStorage.removeItem(KEYS.lastSync),
+    backup.lastSync ? saveLocalLastSync(backup.lastSync) : clearLocalLastSync(),
+    saveOnboardingDone(backup.onboardingDone === true),
   ]);
 }

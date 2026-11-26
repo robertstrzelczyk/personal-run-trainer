@@ -1,8 +1,7 @@
 import type { FitnessSummary } from "../analytics/fitness";
-import { startOfDay } from "../analytics/load";
-import { DAY_MS } from "../analytics/physiology";
+import { addLocalDays, startOfDay, toIsoLocal } from "../analytics/load";
 import type { Profile, RaceEvent, RunFeedback, RunSummary, WorkoutType } from "../types";
-import { recommendForDay, type Recommendation } from "./recommend";
+import { isQualityWorkoutType, recommendForDay, type Recommendation } from "./recommend";
 
 export interface WeekDayPlan {
   date: Date;
@@ -21,14 +20,7 @@ export interface WeekPlan {
   daysPerWeekTarget: number;
 }
 
-function toIsoLocal(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-/** Plan na kolejne 7 dni (dziś + 6), z recommendForDay. */
+/** Plan na kolejne 7 dni (dziś + 6), sekwencyjnie z spacingiem jakości/long. */
 export function buildWeekPlan(
   runs: RunSummary[],
   profile: Profile,
@@ -41,18 +33,29 @@ export function buildWeekPlan(
   const days: WeekDayPlan[] = [];
   let plannedKm = 0;
   let trainingDays = 0;
+  const plannedHardIsos: string[] = [];
+  const plannedLongIsos: string[] = [];
 
   for (let i = 0; i < 7; i++) {
-    const date = new Date(today.getTime() + i * DAY_MS);
-    const recommendation = recommendForDay(runs, profile, fitness, date, races, feedback);
+    const date = addLocalDays(today, i);
+    const recommendation = recommendForDay(runs, profile, fitness, date, races, feedback, {
+      adapt: i === 0,
+      asOf: today,
+      plannedHardIsos: [...plannedHardIsos],
+      plannedLongIsos: [...plannedLongIsos],
+    });
     const planned = recommendation.workout.totalM / 1000;
     if (recommendation.workout.type !== "rest") {
       plannedKm += planned;
       trainingDays += 1;
     }
+    const iso = toIsoLocal(date);
+    if (isQualityWorkoutType(recommendation.workout.type)) plannedHardIsos.push(iso);
+    if (recommendation.workout.type === "long") plannedLongIsos.push(iso);
+
     days.push({
       date,
-      isoDate: toIsoLocal(date),
+      isoDate: iso,
       isToday: i === 0,
       recommendation,
       workoutType: recommendation.workout.type,

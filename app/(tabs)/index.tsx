@@ -23,14 +23,15 @@ import { fetchTodayWeather, type DayWeather } from "@/src/lib/weather";
 import { colors, fonts } from "@/src/theme";
 
 const WORKOUT_SHORT: Record<WorkoutType, string> = {
-  rest: "Rest",
+  rest: "Odp",
   recovery: "Regen",
-  easy: "Easy",
-  long: "Long",
+  easy: "Spok",
+  long: "Długi",
   tempo: "Tempo",
+  cruise: "Cruise",
   intervals: "Int",
   fartlek: "Fartlek",
-  speed: "Speed",
+  speed: "Szyb",
   progression: "Prog",
   marathon: "MP",
   first: "Start",
@@ -83,9 +84,8 @@ export default function TodayScreen() {
     preparing,
     weekPlan,
     todayAdherence,
-    blockPlan,
     deload,
-  } = useAnalysis(runs, profile, vo2, races, feedback);
+  } = useAnalysis(runs, profile, vo2, races, feedback, { week: true });
   const { today, tomorrow, ranToday } = schedule;
   const focus = ranToday ? tomorrow : today;
   const focusWhen = ranToday ? "tomorrow" : "today";
@@ -96,9 +96,11 @@ export default function TodayScreen() {
     const lon = profile.lastLon;
     if (lat === undefined || lon === undefined) return;
     let cancelled = false;
-    void fetchTodayWeather(lat, lon).then((w) => {
-      if (!cancelled) setWeather(w);
-    });
+    void fetchTodayWeather(lat, lon)
+      .then((w) => {
+        if (!cancelled) setWeather(w);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -115,6 +117,16 @@ export default function TodayScreen() {
             zobaczysz formę, obciążenie i trening na dziś oraz jutro.
           </Muted>
         </HeroCard>
+        <Link href="/(tabs)/settings" asChild>
+          <Pressable style={{ marginTop: 12 }}>
+            {({ pressed }) => (
+              <Card style={{ opacity: pressed ? 0.9 : 1 }}>
+                <Subtitle>Ustawienia — sync Garmin</Subtitle>
+                <Muted>Wklej Personal API Key i pobierz aktywności.</Muted>
+              </Card>
+            )}
+          </Pressable>
+        </Link>
         <Link href="/races" asChild>
           <Pressable style={{ marginTop: 12 }}>
             {({ pressed }) => (
@@ -186,16 +198,13 @@ export default function TodayScreen() {
           </Pressable>
         </Link>
 
-        {blockPlan ? (
+        {preparing ? (
           <Link href="/plan" asChild>
             <Pressable>
               {({ pressed }) => (
                 <Card style={{ opacity: pressed ? 0.9 : 1 }}>
                   <Subtitle>Plan blokowy do startu</Subtitle>
-                  <Muted>
-                    {`${blockPlan.weeks.length} tyg. · ~${blockPlan.totalKm.toFixed(0)} km · ${blockPlan.totalTrainingDays} treningów`}
-                  </Muted>
-                  <Muted>Zobacz tygodnie i fazy →</Muted>
+                  <Muted>{`Przygotowanie pod ${preparing.name} — zobacz tygodnie i fazy`}</Muted>
                 </Card>
               )}
             </Pressable>
