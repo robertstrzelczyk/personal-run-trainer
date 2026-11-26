@@ -60,26 +60,32 @@ export async function obtainToken(apiKey: string): Promise<string> {
   if (!/^[\x21-\x7e]{8,512}$/.test(apiKey)) {
     throw new GarminHttpError(400, "Klucz API ma nieprawidłowy format");
   }
-  let res: Response;
-  try {
-    res = await garminHttp(
-      `${baseUrl()}/personalapitoken-service/personal-api/personal-api-key/token`,
-      {
-        method: "POST",
-        headers: { Authorization: `ApiKey ${apiKey}` },
-      },
-    );
-  } catch {
-    throw new GarminHttpError(502, "Nie udało się połączyć z Garmin Connect.");
-  }
-  if (!res.ok) throw new GarminHttpError(res.status, explain(res.status));
-  const text = (await res.text()).trim();
-  let token = text.replace(/^"|"$/g, "");
-  if (text.startsWith("{")) {
-    const json = JSON.parse(text) as Record<string, unknown>;
-    token = String(json.access_token ?? json.accessToken ?? json.token ?? "");
-  }
-  return assertToken(token);
+  return withRetry429(async () => {
+    let res: Response;
+    try {
+      res = await garminHttp(
+        `${baseUrl()}/personalapitoken-service/personal-api/personal-api-key/token`,
+        {
+          method: "POST",
+          headers: { Authorization: `ApiKey ${apiKey}` },
+        },
+      );
+    } catch {
+      throw new GarminHttpError(502, "Nie udało się połączyć z Garmin Connect.");
+    }
+    if (!res.ok) throw new GarminHttpError(res.status, explain(res.status));
+    const text = (await res.text()).trim();
+    let token = text.replace(/^"|"$/g, "");
+    if (text.startsWith("{")) {
+      try {
+        const json = JSON.parse(text) as Record<string, unknown>;
+        token = String(json.access_token ?? json.accessToken ?? json.token ?? "");
+      } catch {
+        throw new GarminHttpError(502, "Garmin zwrócił nieprawidłową odpowiedź tokenu.");
+      }
+    }
+    return assertToken(token);
+  });
 }
 
 export interface GarminActivityItem {
@@ -187,8 +193,9 @@ export async function listRunningActivities(
   token: string,
   startDate: string,
   endDate: string,
-): Promise<GarminActivityItem[]> {
+): Promise<{ items: GarminActivityItem[]; warnings: string[] }> {
   const byId = new Map<string, GarminActivityItem>();
+  const warnings: string[] = [];
 
   async function collect(from: string, to: string): Promise<void> {
     if (from > to) return;
@@ -202,7 +209,7 @@ export async function listRunningActivities(
       const span = daysBetweenIso(from, to);
       if (span <= 0) return;
       if (span === 1) {
-        // jedno-dniowe okno też pada — pomijamy, żeby nie blokować całego syncu
+        warnings.push(`Pominięto dzień ${from} (Garmin HTTP 500) — spróbuj ponownie później.`);
         return;
       }
       const mid = addDaysIso(from, Math.floor(span / 2));
@@ -221,9 +228,10 @@ export async function listRunningActivities(
     cursor = addDaysIso(to, 1);
   }
 
-  return [...byId.values()].sort(
+  const items = [...byId.values()].sort(
     (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
   );
+  return { items, warnings };
 }
 
 function isFit(bytes: Uint8Array) {

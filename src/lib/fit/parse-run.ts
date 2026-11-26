@@ -87,6 +87,7 @@ export function parseRunFit(
   source: RunSource,
   idOverride?: string,
   sportHint?: ActivitySport,
+  name?: string,
 ): RunSummary {
   const stream = Stream.fromByteArray(Array.from(bytes));
   const decoder = new Decoder(stream);
@@ -182,6 +183,7 @@ export function parseRunFit(
     id: idOverride ?? `fit-${startMs}`,
     source,
     sport,
+    name: name?.trim() || undefined,
     startTime,
     distanceM: Math.round(distanceM),
     durationS: Math.round(durationS),

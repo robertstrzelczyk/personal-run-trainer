@@ -28,7 +28,7 @@ export default function WorkoutDetailScreen() {
   const { when } = useLocalSearchParams<{ when: string }>();
   const router = useRouter();
   const { runs, profile, vo2, races, feedback } = useAuth();
-  const { schedule, form } = useAnalysis(runs, profile, vo2, races, feedback);
+  const { schedule, form } = useAnalysis(runs, profile, vo2, races, feedback, { week: false });
   const [busy, setBusy] = useState<"text" | "fit" | null>(null);
 
   const key = when === "tomorrow" ? "tomorrow" : when === "today" ? "today" : null;

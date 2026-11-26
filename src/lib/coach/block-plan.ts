@@ -1,9 +1,8 @@
 import type { FitnessSummary } from "../analytics/fitness";
-import { startOfDay } from "../analytics/load";
-import { DAY_MS } from "../analytics/physiology";
-import type { Profile, RaceEvent, RunSummary, WorkoutType } from "../types";
+import { addLocalDays, startOfDay, toIsoLocal } from "../analytics/load";
+import type { Profile, RaceEvent, RunFeedback, RunSummary, WorkoutType } from "../types";
 import { activeRace, daysToRaceDate, resolveRacePhase, type RacePhase } from "./race-phase";
-import { recommendForDay } from "./recommend";
+import { isQualityWorkoutType, recommendForDay } from "./recommend";
 
 export interface BlockPlanDay {
   date: Date;
@@ -34,13 +33,6 @@ export interface BlockPlan {
   totalTrainingDays: number;
 }
 
-function toIsoLocal(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 const BLOCK_WEEKS: Record<string, number> = {
   "5k": 8,
   "10k": 10,
@@ -49,8 +41,8 @@ const BLOCK_WEEKS: Record<string, number> = {
 };
 
 /**
- * Plan blokowy do aktywnego startu (max 8–16 tyg. wstecz od daty startu,
- * od dziś w przód). Używa recommendForDay per dzień.
+ * Plan blokowy do aktywnego startu (max 8–16 tyg.).
+ * Sekwencyjny, bez adaptacji na dniach przyszłych (adapt tylko dziś).
  */
 export function buildRaceBlockPlan(
   runs: RunSummary[],
@@ -58,6 +50,7 @@ export function buildRaceBlockPlan(
   fitness: FitnessSummary,
   now: Date = new Date(),
   races: RaceEvent[] = [],
+  feedback: Record<string, RunFeedback> = {},
 ): BlockPlan | undefined {
   const race = activeRace(races);
   if (!race) return undefined;
@@ -70,20 +63,31 @@ export function buildRaceBlockPlan(
   const days: BlockPlanDay[] = [];
   let totalKm = 0;
   let totalTrainingDays = 0;
+  const plannedHardIsos: string[] = [];
+  const plannedLongIsos: string[] = [];
 
   for (let i = 0; i < maxDays; i++) {
-    const date = new Date(today.getTime() + i * DAY_MS);
+    const date = addLocalDays(today, i);
     const phaseInfo = resolveRacePhase(race, date);
     if (phaseInfo.phase === "done") break;
-    const rec = recommendForDay(runs, profile, fitness, date, races);
+    const rec = recommendForDay(runs, profile, fitness, date, races, feedback, {
+      adapt: i === 0,
+      asOf: today,
+      plannedHardIsos: [...plannedHardIsos],
+      plannedLongIsos: [...plannedLongIsos],
+    });
     const plannedKm = rec.workout.type === "rest" ? 0 : rec.workout.totalM / 1000;
     if (rec.workout.type !== "rest") {
       totalKm += plannedKm;
       totalTrainingDays += 1;
     }
+    const iso = toIsoLocal(date);
+    if (isQualityWorkoutType(rec.workout.type)) plannedHardIsos.push(iso);
+    if (rec.workout.type === "long") plannedLongIsos.push(iso);
+
     days.push({
       date,
-      isoDate: toIsoLocal(date),
+      isoDate: iso,
       workoutType: rec.workout.type,
       title: rec.workout.title,
       plannedKm,

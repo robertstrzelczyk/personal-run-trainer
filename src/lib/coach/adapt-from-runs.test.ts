@@ -65,4 +65,20 @@ describe("computeExecutionAdaptation", () => {
     expect(adapt.volumeScale).toBe(1);
     expect(adapt.reasons.some((r) => /rytm/i.test(r))).toBe(true);
   });
+
+  it("ignores future lookback days relative to asOf", () => {
+    const futureDay = new Date("2026-06-18T12:00:00.000Z");
+    const asOf = new Date("2026-06-15T12:00:00.000Z");
+    const adapt = computeExecutionAdaptation(
+      [],
+      profile,
+      futureDay,
+      () => workout("tempo"),
+      7,
+      asOf,
+    );
+    // Dni ≥ asOf nie wchodzą do recent (inaczej byłyby „skipped” tempo)
+    expect(adapt.recent.every((r) => r.iso < "2026-06-15")).toBe(true);
+    expect(adapt.recent.length).toBeGreaterThan(0);
+  });
 });

@@ -33,10 +33,11 @@ export async function runForActivity(
   token: string,
   id: string,
   sportHint?: ActivitySport,
+  name?: string,
 ): Promise<{ run?: RunSummary; skipped?: boolean; reason?: string }> {
   const bytes = await downloadActivityFit(token, id);
   try {
-    return { run: parseRunFit(bytes, "garmin", `garmin-${id}`, sportHint) };
+    return { run: parseRunFit(bytes, "garmin", `garmin-${id}`, sportHint, name) };
   } catch (error) {
     if (error instanceof NotARunError) return { skipped: true, reason: error.message };
     throw new GarminHttpError(422, error instanceof Error ? error.message : "Nie udało się odczytać pliku FIT");
@@ -47,7 +48,7 @@ export async function activityFromListItem(
   token: string,
   item: GarminActivityItem,
 ): Promise<{ run?: RunSummary; skipped?: boolean; reason?: string }> {
-  return runForActivity(token, item.id, item.sport);
+  return runForActivity(token, item.id, item.sport, item.name);
 }
 
 async function fetchVo2Chunked(token: string, start: Date, end: Date) {

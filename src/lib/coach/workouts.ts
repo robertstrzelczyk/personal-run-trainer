@@ -243,7 +243,7 @@ export function cruiseIntervals(ctx: BuildContext, weeklyKm: number) {
   const t = ctx.paces.threshold;
   return assemble(
     ctx,
-    "tempo",
+    "cruise",
     `Interwały progowe ${reps} × 6 min`,
     `${reps} odcinków po 6 min w tempie progowym z 1 min truchtu przerwy.`,
     [

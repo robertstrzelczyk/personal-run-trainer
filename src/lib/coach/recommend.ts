@@ -1,4 +1,13 @@
-import { classifyRun, daysBetween, formState, loadSeries, startOfDay, type FormState } from "../analytics/load";
+import {
+  addLocalDays,
+  classifyRun,
+  daysBetween,
+  formState,
+  loadSeries,
+  startOfDay,
+  toIsoLocal,
+  type FormState,
+} from "../analytics/load";
 import { DAY_MS, formatMinutes, median, pacesFromVdot } from "../analytics/physiology";
 import type { FitnessSummary } from "../analytics/fitness";
 import type { Goal, Profile, RaceEvent, RunFeedback, RunSummary, Workout } from "../types";
@@ -38,6 +47,26 @@ import {
 export interface RecommendOptions {
   /** gdy false — bez pętli plan↔wykonanie (do historii / adaptacji) */
   adapt?: boolean;
+  /** „dziś” zegara — przyszłe dni w lookbacku adaptacji nie liczą się jako skipped */
+  asOf?: Date;
+  /** dni z zaplanowaną jakością w tej projekcji (ISO lokalne) — spacing hard */
+  plannedHardIsos?: string[];
+  /** dni z zaplanowanym longiem w tej projekcji */
+  plannedLongIsos?: string[];
+}
+
+const QUALITY_TYPES = new Set([
+  "tempo",
+  "cruise",
+  "intervals",
+  "fartlek",
+  "speed",
+  "progression",
+  "marathon",
+]);
+
+export function isQualityWorkoutType(type: string): boolean {
+  return QUALITY_TYPES.has(type);
 }
 
 export interface Recommendation {
@@ -98,12 +127,18 @@ export function recommendForDay(
   options: RecommendOptions = {},
 ): Recommendation {
   const adapt = options.adapt !== false;
+  const asOf = startOfDay(options.asOf ?? day);
   const dayStart = startOfDay(day);
   const runs = allRuns
     .filter((r) => new Date(r.startTime).getTime() < dayStart.getTime())
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 
-  const yesterday = new Date(dayStart.getTime() - DAY_MS);
+  const sameDayRuns = allRuns.filter(
+    (r) => daysBetween(new Date(r.startTime), dayStart) === 0,
+  );
+  const ranSameDay = sameDayRuns.length > 0;
+
+  const yesterday = addLocalDays(dayStart, -1);
   const series = loadSeries(runs, profile, yesterday);
   const form = formState(series, runs, profile, dayStart);
 
@@ -118,9 +153,17 @@ export function recommendForDay(
       : undefined;
 
   const adaptation = adapt
-    ? computeExecutionAdaptation(allRuns, profile, dayStart, (past) =>
-        recommendForDay(allRuns, profile, fitness, past, races, feedback, { adapt: false })
-          .workout,
+    ? computeExecutionAdaptation(
+        allRuns,
+        profile,
+        dayStart,
+        (past) =>
+          recommendForDay(allRuns, profile, fitness, past, races, feedback, {
+            adapt: false,
+            asOf,
+          }).workout,
+        7,
+        asOf,
       )
     : undefined;
 
@@ -151,15 +194,34 @@ export function recommendForDay(
   const weeklyKm = window ? (last28.reduce((s, r) => s + r.distanceM, 0) / 1000) / (window / 7) : 0;
 
   const lastRun = runs.at(-1);
-  const daysSinceLast = lastRun ? daysBetween(new Date(lastRun.startTime), dayStart) : undefined;
+  const daysSinceLast = ranSameDay
+    ? 0
+    : lastRun
+      ? daysBetween(new Date(lastRun.startTime), dayStart)
+      : undefined;
 
   const medianDuration = median(last28.map((r) => r.durationS)) ?? 30 * 60;
   const intensities = new Map(runs.map((r) => [r.id, classifyRun(r, profile, medianDuration)]));
   const lastHard = [...runs].reverse().find((r) => intensities.get(r.id)!.isHard && !intensities.get(r.id)!.isLong);
   const lastLong = [...runs].reverse().find((r) => intensities.get(r.id)!.isLong);
-  const daysSinceHard = lastHard ? daysBetween(new Date(lastHard.startTime), dayStart) : 99;
-  const daysSinceLong = lastLong ? daysBetween(new Date(lastLong.startTime), dayStart) : 99;
-  const runDays7 = new Set(last7.map((r) => new Date(r.startTime).toDateString())).size;
+  const hardGaps = [
+    lastHard ? daysBetween(new Date(lastHard.startTime), dayStart) : 99,
+    ...(options.plannedHardIsos ?? []).map((iso) => daysBetween(new Date(`${iso}T12:00:00`), dayStart)),
+  ].filter((g) => g >= 0);
+  const longGaps = [
+    lastLong ? daysBetween(new Date(lastLong.startTime), dayStart) : 99,
+    ...(options.plannedLongIsos ?? []).map((iso) => daysBetween(new Date(`${iso}T12:00:00`), dayStart)),
+  ].filter((g) => g >= 0);
+  const daysSinceHard = hardGaps.length ? Math.min(...hardGaps) : 99;
+  const daysSinceLong = longGaps.length ? Math.min(...longGaps) : 99;
+  const plannedDays7 = new Set(
+    [...(options.plannedHardIsos ?? []), ...(options.plannedLongIsos ?? [])].filter((iso) => {
+      const g = daysBetween(new Date(`${iso}T12:00:00`), dayStart);
+      return g >= 0 && g <= 7;
+    }),
+  );
+  const runDays7 =
+    new Set(last7.map((r) => new Date(r.startTime).toDateString())).size + plannedDays7.size;
 
   const finish = (workout: Workout, alternative?: Workout): Recommendation => ({
     forDate: dayStart,
@@ -445,15 +507,29 @@ export function recommendTodayAndTomorrow(
   feedback: Record<string, RunFeedback> = {},
 ): { today: Recommendation; tomorrow: Recommendation; ranToday: boolean } {
   const todayStart = startOfDay(now);
-  const tomorrowStart = new Date(todayStart);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const tomorrowStart = addLocalDays(todayStart, 1);
   const ranToday = runs.some((r) => daysBetween(new Date(r.startTime), now) === 0);
   const today = {
-    ...recommendForDay(runs, profile, fitness, todayStart, races, feedback),
+    ...recommendForDay(runs, profile, fitness, todayStart, races, feedback, {
+      adapt: true,
+      asOf: todayStart,
+    }),
     forTomorrow: false,
   };
+  const plannedHardIsos: string[] = [];
+  const plannedLongIsos: string[] = [];
+  if (!ranToday) {
+    const iso = toIsoLocal(todayStart);
+    if (isQualityWorkoutType(today.workout.type)) plannedHardIsos.push(iso);
+    if (today.workout.type === "long") plannedLongIsos.push(iso);
+  }
   const tomorrow = {
-    ...recommendForDay(runs, profile, fitness, tomorrowStart, races, feedback),
+    ...recommendForDay(runs, profile, fitness, tomorrowStart, races, feedback, {
+      adapt: false,
+      asOf: todayStart,
+      plannedHardIsos,
+      plannedLongIsos,
+    }),
     forTomorrow: true,
   };
   return { today, tomorrow, ranToday };

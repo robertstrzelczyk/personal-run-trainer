@@ -1,10 +1,10 @@
-import { DAY_MS } from "../analytics/physiology";
-import { startOfDay } from "../analytics/load";
+import { addLocalDays, startOfDay, toIsoLocal } from "../analytics/load";
 import type { Profile, RunSummary, Workout, WorkoutType } from "../types";
 import { comparePlanToRuns, type AdherenceStatus } from "./adherence";
 
 const QUALITY: WorkoutType[] = [
   "tempo",
+  "cruise",
   "intervals",
   "fartlek",
   "speed",
@@ -26,16 +26,10 @@ export interface ExecutionAdaptation {
   recent: Array<{ iso: string; planned: WorkoutType; status: AdherenceStatus }>;
 }
 
-function toIso(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 /**
  * Porównuje ostatnie dni: plan (przez planForDay) vs faktyczne biegi.
  * planForDay musi być wywołane z adapt:false, żeby uniknąć rekurencji.
+ * `asOf` — nie oceniaj dni ≥ asOf (przyszłość / „dziś jeszcze nie”).
  */
 export function computeExecutionAdaptation(
   allRuns: RunSummary[],
@@ -43,8 +37,10 @@ export function computeExecutionAdaptation(
   day: Date,
   planForDay: (past: Date) => Workout,
   lookbackDays = 7,
+  asOf: Date = new Date(),
 ): ExecutionAdaptation {
   const dayStart = startOfDay(day);
+  const asOfStart = startOfDay(asOf);
   const recent: ExecutionAdaptation["recent"] = [];
   let tooHardEasy = 0;
   let skippedQuality = 0;
@@ -53,11 +49,13 @@ export function computeExecutionAdaptation(
   let matched = 0;
 
   for (let i = 1; i <= lookbackDays; i++) {
-    const past = new Date(dayStart.getTime() - i * DAY_MS);
+    const past = addLocalDays(dayStart, -i);
+    // Nie traktuj przyszłych / bieżącego dnia jako „skipped” przy projekcji planu.
+    if (past.getTime() >= asOfStart.getTime()) continue;
     const planned = planForDay(past);
     const result = comparePlanToRuns(planned, allRuns, past, profile);
     recent.push({
-      iso: toIso(past),
+      iso: toIsoLocal(past),
       planned: planned.type,
       status: result.status,
     });

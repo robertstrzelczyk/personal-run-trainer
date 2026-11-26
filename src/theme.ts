@@ -16,6 +16,7 @@ export const colors = {
   heroFrom: "#0d9468",
   heroTo: "#12352a",
   overlay: "rgba(12, 21, 18, 0.55)",
+  chartBlue: "#5b8def",
 };
 
 export const fonts = {

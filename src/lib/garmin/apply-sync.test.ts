@@ -55,14 +55,35 @@ describe("apply-sync", () => {
       profile,
       runs: [existing],
       vo2: [{ date: "2026-01-01", value: 47 }],
+      lastSync: null,
     });
     expect(merged.runs).toHaveLength(2);
     expect(merged.profile.maxHr).toBe(190);
+    expect(merged.lastSync).toBeTruthy();
     expect(merged.vo2).toEqual(
       expect.arrayContaining([
         { date: "2026-01-01", value: 47 },
         { date: "2026-01-02", value: 48 },
       ]),
     );
+  });
+
+  it("does not bump lastSync after incomplete sync", () => {
+    const prev = "2026-01-01T00:00:00.000Z";
+    const result: SyncResult = {
+      runs: [],
+      vo2: [],
+      alreadyKnown: 0,
+      failed: 2,
+      warnings: ["429"],
+      incomplete: true,
+    };
+    const merged = mergeSyncIntoState(result, {
+      profile,
+      runs: [existing],
+      vo2: [],
+      lastSync: prev,
+    });
+    expect(merged.lastSync).toBe(prev);
   });
 });

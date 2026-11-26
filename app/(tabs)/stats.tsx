@@ -34,7 +34,7 @@ const SPORT_FILTERS: Array<{ id: SportFilter; label: string }> = [
 const SPORT_COLORS: Record<ActivitySport, string> = {
   running: colors.primary,
   walking: colors.accent,
-  cycling: "#5b8def",
+  cycling: colors.chartBlue,
 };
 
 export default function StatsScreen() {
