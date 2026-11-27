@@ -158,6 +158,7 @@ export default function RunsScreen() {
             const { group, expanded: open } = item;
             return (
               <Pressable
+                testID={`runs-month-${group.key}`}
                 onPress={() => toggleMonth(group.key)}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: open }}

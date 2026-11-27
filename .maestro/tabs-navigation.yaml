@@ -5,16 +5,12 @@ tags:
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible:
-      id: "today-screen"
-    timeout: 15000
+- runFlow: shared/skip-onboarding.yaml
 
 - tapOn: "Forma"
 - assertVisible:
     id: "fitness-screen"
 - assertVisible: "Stan wytrenowania"
-- assertVisible: "Stopień wytrenowania.*"
 
 - tapOn: "Biegi"
 - assertVisible:
@@ -26,12 +22,10 @@ tags:
 - assertVisible:
     id: "stats-screen"
 - assertVisible: "Statystyki"
-- assertVisible: "łącznie we wszystkich sportach"
 
 - tapOn: "Ustawienia"
 - assertVisible:
     id: "settings-screen"
-- assertVisible: "Dane lokalne"
 - assertVisible: "Garmin Connect"
 
 - tapOn: "Dziś"

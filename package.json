@@ -50,7 +50,8 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:e2e": "maestro test .maestro",
-    "test:e2e:smoke": "maestro test .maestro --include-tags smoke",
+    "test:e2e:smoke": "maestro test .maestro/launch.yaml .maestro/tabs-navigation.yaml .maestro/runs-smoke.yaml",
+    "test:e2e:runs": "maestro test .maestro/runs-smoke.yaml",
     "eas:apk": "eas build -p android --profile preview",
     "eas:e2e:apk": "eas build -p android --profile e2e-test"
   },

@@ -30,6 +30,25 @@ npx expo start
 npm test
 ```
 
+## Maestro (E2E)
+
+Flowy w `.maestro/` (`appId: pl.biegowytrener.app`). Wymagają **zbudowanego APK** (nie Expo Go) + emulatora Android (API 31–34).
+
+```bash
+# 1) CLI Maestro (Windows — Maestro Studio albo instalator z docs.maestro.dev)
+# 2) APK E2E
+npx eas-cli@latest build -p android --profile e2e-test
+# zainstaluj APK na emulatorze, potem:
+
+npm run test:e2e:smoke   # launch + taby + Biegi
+npm run test:e2e         # cały katalog .maestro
+
+# albo w chmurze EAS:
+npx eas-cli@latest workflow:run .eas/workflows/e2e-test-android.yml
+```
+
+Po `clearState` każdy flow przechodzi onboarding (`shared/skip-onboarding.yaml`) i wchodzi na **Dziś** bez syncu Garmin.
+
 ## Zakładki
 
 - **Dziś** — trening dziś/jutro, plan 7 dni, plan vs wykonanie, pogoda, deload, skrót planu blokowego

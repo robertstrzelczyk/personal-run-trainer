@@ -15,6 +15,7 @@ jobs:
       flow_path:
         - .maestro/launch.yaml
         - .maestro/tabs-navigation.yaml
+        - .maestro/runs-smoke.yaml
         - .maestro/fitness-empty.yaml
         - .maestro/stats-periods.yaml
         - .maestro/settings-garmin.yaml

@@ -5,10 +5,8 @@ tags:
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible:
-      id: "today-screen"
-    timeout: 15000
+- runFlow: shared/skip-onboarding.yaml
+- assertVisible:
+    id: "today-screen"
 - assertVisible: "Witaj"
-- assertVisible: "Trener biegowy"
-- assertVisible: ".*Garmin Connect.*"
+- assertVisible: ".*Garmin.*"

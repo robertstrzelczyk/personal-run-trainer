@@ -62,7 +62,7 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <Screen>
+    <Screen testID="onboarding-screen">
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 48 }}>
         <Card accent>
           <Title>Witaj w Trenerze biegowym</Title>
@@ -78,14 +78,16 @@ export default function OnboardingScreen() {
             </Muted>
             <Field
               label="Personal API Key"
+              testID="onboarding-api-key"
               value={apiKey}
               onChangeText={setApiKey}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry
             />
-            <Button title="Zapisz i dalej" onPress={saveKeyAndNext} />
+            <Button testID="onboarding-save-key" title="Zapisz i dalej" onPress={saveKeyAndNext} />
             <Button
+              testID="onboarding-skip-key"
               title="Pomiń na razie"
               variant="ghost"
               onPress={() => setStep(1)}
@@ -98,43 +100,53 @@ export default function OnboardingScreen() {
             <Subtitle>Profil treningowy</Subtitle>
             <Field
               label="Wiek"
+              testID="onboarding-age"
               keyboardType="number-pad"
               value={String(profile.age)}
               onChangeText={(t) => setProfile({ ...profile, age: Number(t) || profile.age })}
             />
             <ChipSelect
               label="Płeć"
+              testID="onboarding-sex"
               value={profile.sex}
               options={SEX_OPTIONS}
               onChange={(sex: Sex) => setProfile({ ...profile, sex })}
             />
             <Field
               label="HRmax"
+              testID="onboarding-max-hr"
               keyboardType="number-pad"
               value={String(profile.maxHr)}
               onChangeText={(t) => setProfile({ ...profile, maxHr: Number(t) || profile.maxHr })}
             />
             <Field
               label="HR spoczynkowe"
+              testID="onboarding-rest-hr"
               keyboardType="number-pad"
               value={String(profile.restHr)}
               onChangeText={(t) => setProfile({ ...profile, restHr: Number(t) || profile.restHr })}
             />
             <ChipSelect
               label="Cel"
+              testID="onboarding-goal"
               value={profile.goal}
               options={GOAL_OPTIONS}
               onChange={(goal: Goal) => setProfile({ ...profile, goal })}
             />
             <Field
               label="Dni treningowe / tydzień"
+              testID="onboarding-days-per-week"
               keyboardType="number-pad"
               value={String(profile.daysPerWeek)}
               onChangeText={(t) =>
                 setProfile({ ...profile, daysPerWeek: Math.min(7, Math.max(2, Number(t) || 4)) })
               }
             />
-            <Button title="Zapisz i dalej" onPress={saveProfileAndNext} />
+            <Button
+              testID="onboarding-save-profile"
+              title="Zapisz i dalej"
+              onPress={saveProfileAndNext}
+            />
           </Card>
         )}
 
@@ -147,11 +159,13 @@ export default function OnboardingScreen() {
             </Muted>
             <View style={{ gap: 8, marginTop: 4 }}>
               <Button
+                testID="onboarding-sync-start"
                 title={busy ? "Synchronizuję…" : "Synchronizuj i start"}
                 onPress={() => finish(true)}
                 disabled={busy}
               />
               <Button
+                testID="onboarding-skip-sync"
                 title="Pomiń sync — wejdź do aplikacji"
                 variant="ghost"
                 onPress={() => finish(false)}

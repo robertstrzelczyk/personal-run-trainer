@@ -1,12 +1,19 @@
-# Wspólna konfiguracja Maestro.
-# Uruchomienie: npm run test:e2e
-# Wymaga APK/.app zainstalowanego na emulatorze lub urządzeniu.
+# Maestro E2E — Trener biegowy (Android APK / iOS .app)
+# appId = android.package / ios.bundleIdentifier z app.json
+#
+# Lokalnie:
+#   1. Emulator Android (API 31–34) + zainstalowany APK (eas build -p android --profile e2e-test)
+#   2. npm run test:e2e:smoke   # szybki smoke
+#   3. npm run test:e2e         # pełny zestaw
+#
+# CI: .eas/workflows/e2e-test-android.yml
 
 appId: pl.biegowytrener.app
 
 flows:
   - launch.yaml
   - tabs-navigation.yaml
+  - runs-smoke.yaml
   - fitness-empty.yaml
   - stats-periods.yaml
   - settings-garmin.yaml

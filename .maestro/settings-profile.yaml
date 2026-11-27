@@ -5,10 +5,7 @@ tags:
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible:
-      id: "today-screen"
-    timeout: 15000
+- runFlow: shared/skip-onboarding.yaml
 
 - tapOn: "Ustawienia"
 - assertVisible:
@@ -70,7 +67,6 @@ tags:
 - tapOn:
     id: "settings-save-profile"
 
-# Alert: „Zapisano”
 - assertVisible: "Zapisano"
 - tapOn: "OK"
 

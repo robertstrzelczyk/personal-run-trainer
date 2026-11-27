@@ -1,0 +1,26 @@
+# Wspólny flow: świeży start → pomiń onboarding (bez Garmin sync) → Dziś.
+appId: pl.biegowytrener.app
+---
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-screen"
+    timeout: 20000
+- assertVisible: "Witaj w Trenerze biegowym"
+- tapOn:
+    id: "onboarding-skip-key"
+- tapOn:
+    id: "onboarding-save-profile"
+- tapOn:
+    id: "onboarding-skip-sync"
+- extendedWaitUntil:
+    visible:
+      id: "today-screen"
+    timeout: 20000
+# Debug APK kładzie pasek „Open debugger…” na tab barze. Zamknij go, zanim klikniesz tab.
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings."
+    commands:
+      - tapOn:
+          point: "92%,92%"
+      - assertNotVisible: "Open debugger to view warnings."

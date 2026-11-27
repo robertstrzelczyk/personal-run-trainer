@@ -1,0 +1,37 @@
+# Smoke / regresja zakładki Biegi (freeze UI — pusta lista musi się otworzyć szybko).
+appId: pl.biegowytrener.app
+tags:
+  - smoke
+  - runs
+  - regression
+---
+- launchApp:
+    clearState: true
+- runFlow: shared/skip-onboarding.yaml
+
+- tapOn:
+    text: "Biegi"
+- extendedWaitUntil:
+    visible:
+      id: "runs-screen"
+    timeout: 10000
+- assertVisible: "Aktywności"
+- assertVisible: "Brak aktywności.*"
+
+# Szybkie przełączenie tabów — nie powinno zablokować UI
+- tapOn:
+    text: "Dziś"
+- assertVisible:
+    id: "today-screen"
+- tapOn:
+    text: "Biegi"
+- assertVisible:
+    id: "runs-screen"
+- tapOn:
+    text: "Forma"
+- assertVisible:
+    id: "fitness-screen"
+- tapOn:
+    text: "Biegi"
+- assertVisible:
+    id: "runs-screen"
